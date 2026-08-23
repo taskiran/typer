@@ -1,0 +1,235 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Typer</title>
+<!--
+  Kapsül.
+
+  Tek pencere, iki şekil. Konuşurken canlı bir ölçerden ve başka hiçbir
+  şeyden ibaret küçük bir kapsüldür — düğme yoktur, çünkü kontrol tuşun
+  kendisidir. Yazacak bir yer bulunamadığında yukarı doğru büyüyerek
+  kelimeleri ve bir Kopyala düğmesini taşıyan bir karta dönüşür ve alınana
+  kadar orada durur.
+
+  Ölçer bir döngüden değil, motorun yayımladığı gerçek bir FFT'den
+  beslenir: sessizlik düzdür, ve konuştuğun gibi hareket eder.
+
+  Zifiri siyah üstüne beyaz, çünkü OLED bir panelde var olan en yüksek
+  kontrast çifti budur ve çubuklar 3.75 pikselde bile okunur kalır.
+-->
+<style>
+  html, body {
+    width: 100%; height: 100%;
+    margin: 0; padding: 0;
+    background: transparent;
+    overflow: hidden;
+    -webkit-user-select: none;
+    cursor: default;
+    font-family: "Segoe UI Variable Text", "Segoe UI", -apple-system,
+                 BlinkMacSystemFont, system-ui, sans-serif;
+  }
+
+  /* Her şey ALT ORTAYA çapalı: kart kapsülü ekran kenarından dışarı
+     itmek yerine onun üstünde yukarı doğru büyür. */
+  #wrap {
+    position: absolute;
+    left: 50%; bottom: 10px;
+    transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+
+  /* Kapsül aşağı değil, ENİNE açılıp kapanır: kendi merkezine çöker ve
+     yok olur. Alt kenardan aşağı kayması pencerenin taşındığı gibi
+     okunur; bu ise şeyin kendisinin kapandığı gibi. Eğrideki taşma,
+     onu bir silme değil bir sıçrama yapan şey. */
+  #pill {
+    transform: scaleX(.08);
+    opacity: 0;
+    transform-origin: 50% 50%;
+    transition: transform 240ms cubic-bezier(.34,1.42,.56,1),
+                opacity 150ms ease;
+  }
+  #wrap.in #pill { transform: scaleX(1); opacity: 1; }
+
+  #card {
+    display: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 180ms ease, transform 220ms cubic-bezier(.22,1,.36,1);
+    width: 380px;
+    box-sizing: border-box;
+    padding: 14px 16px 12px;
+    border-radius: 14px;
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 14px 44px rgba(0,0,0,.85);
+  }
+  body.card #card { display: block; }
+  body.card #wrap.in #card { opacity: 1; transform: none; }
+
+  #label {
+    font-size: 10px; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: #8b8b8b; margin-bottom: 7px;
+  }
+  body.error #label { color: #d98b7a; }
+
+  #text {
+    font-size: 13.5px; line-height: 1.5; color: #ededed;
+    max-height: 76px; overflow: hidden;
+    /* Kesiği çırpmak yerine soldur: bu bir önizleme, ve sert bir kesiğin
+       üstündeki üç nokta bir hata gibi okunur. */
+    -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+            mask-image: linear-gradient(180deg, #000 62%, transparent 100%);
+    overflow-wrap: anywhere;
+  }
+
+  #act {
+    margin: 11px auto 0; display: block;
+    padding: 6px 22px;
+    font: inherit; font-size: 12px; font-weight: 600;
+    color: #e4e4e4;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 140ms ease;
+  }
+  #act:hover  { background: rgba(255,255,255,.12); }
+  #act:active { background: rgba(255,255,255,.06); }
+  #act:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+
+  #pill {
+    display: flex; align-items: center;
+    padding: 7px 15px;
+    will-change: transform, opacity;
+    border-radius: 999px;
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: 0 8px 26px rgba(0,0,0,.8);
+  }
+  body.card #pill { display: none; }
+  #meter { display: block; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #pill, #card { transition: opacity 140ms ease; }
+    #pill, #wrap.in #pill { transform: scaleX(1); }
+    #card, body.card #wrap.in #card { transform: none; }
+  }
+</style>
+
+<div id="wrap">
+  <div id="card">
+    <div id="label">Yazılacak yer bulunamadı</div>
+    <div id="text"></div>
+    <button id="act" type="button">Kopyala</button>
+  </div>
+  <div id="pill">
+    <canvas id="meter" width="132" height="26"></canvas>
+  </div>
+</div>
+
+<script>
+const wrap = document.getElementById('wrap');
+const meter = document.getElementById('meter');
+const mctx = meter.getContext('2d');
+const labelEl = document.getElementById('label');
+const textEl = document.getElementById('text');
+const actBtn = document.getElementById('act');
+
+// Arka tampon aygıt çözünürlüğünde; çizim CSS pikselinde kalır.
+(function hidpi() {
+  const r = window.devicePixelRatio || 1;
+  const w = meter.width, h = meter.height;
+  meter.style.width = w + 'px';
+  meter.style.height = h + 'px';
+  meter.width = Math.round(w * r);
+  meter.height = Math.round(h * r);
+  mctx.setTransform(r, 0, 0, r, 0, 0);
+  meter._w = w; meter._h = h;
+})();
+
+const BARS = 26;
+// EKOLAYZER, kayan bir dalga formu değil: her çubuk bir frekans bandına
+// sahiptir ve kendi başına yükselip alçalır. Değerler mikrofonun gerçek
+// FFT'sinden gelir ve bant bant normalize edilmiştir — konuşma enerjisi
+// en alt banttan en üste kabaca 40 kat düşer, ve bu düzeltme olmadan sağ
+// yarı neredeyse hiç oynamaz.
+const bars = new Array(BARS).fill(0);   // çizilen, yumuşatılmış
+let bands = new Array(BARS).fill(0);    // en son bildirilen
+let state = 'idle';
+
+// Hızlı yukarı, yavaş aşağı. Bir ölçeri ölçer gibi okutan şey bu
+// bakışımsızlıktır: ani vuruşu yakalar ve sönmesine izin verir.
+const ATTACK = 0.55, RELEASE = 0.11;
+
+function draw() {
+  const w = meter._w, h = meter._h;
+  mctx.clearRect(0, 0, w, h);
+  // İki katı çubuk, yarısı kalınlıkta; aralık da ona göre ölçekli, ki
+  // sıra aynı şeridi doldursun — daha ince dişler, aynı yer kaplama.
+  const gap = w / 96;
+  const bw = (w - (BARS - 1) * gap) / BARS;
+  const floor = 2.5;                    // dinlenme yüksekliği: asla yok olmaz
+  const mid = h / 2;
+  for (let i = 0; i < BARS; i++) {
+    const v = bars[i];
+    const bh = Math.max(floor, v * (h - floor - 1) + floor);
+    mctx.fillStyle = '#FFFFFF';
+    mctx.globalAlpha = 0.32 + v * 0.68;
+    mctx.beginPath();
+    // ORTA ÇİZGİDEN büyür, yukarı ve aşağı birlikte açılır. Alttan
+    // çapalamak her çubuğa bir ağır bir de hafif uç verir; bu kadar
+    // alçak bir kapsül, hareket kendi ortasına göre bakışımlı olduğunda
+    // daha iyi okunur, ve dinlenirken sıra düz bir çizgiye oturur.
+    // Yarıçap KISA kenarın yarısını asla aşamaz; dinlenirken çubuk
+    // uzun olduğundan geniştir, yani tek başına bw/2 reddedilirdi.
+    mctx.roundRect(i * (bw + gap), mid - bh / 2, bw, bh,
+                   Math.min(bw, bh) / 2);
+    mctx.fill();
+  }
+  mctx.globalAlpha = 1;
+}
+
+function frame() {
+  const live = state === 'listening';
+  for (let i = 0; i < BARS; i++) {
+    const t = live ? (bands[i] || 0) : 0;
+    bars[i] += (t - bars[i]) * (t > bars[i] ? ATTACK : RELEASE);
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+const COPY = 'Kopyala', OK = 'Tamam';
+
+window.typer.onState((s) => {
+  const next = s.state || 'idle';
+  if (next !== state) {
+    state = next;
+    const card = state === 'preview' || state === 'error';
+    document.body.classList.toggle('card', card);
+    document.body.classList.toggle('error', state === 'error');
+    if (card) {
+      labelEl.textContent = state === 'error'
+        ? 'Sorun' : 'Yazılacak yer bulunamadı';
+      actBtn.textContent = state === 'error' ? OK : COPY;
+    }
+  }
+  bands = (state === 'listening' && Array.isArray(s.bands) && s.bands.length)
+    ? s.bands : new Array(BARS).fill(0);
+  if ((state === 'preview' || state === 'error') && textEl.textContent !== s.text) {
+    textEl.textContent = s.text || '';
+  }
+  wrap.classList.toggle('in', state !== 'idle');
+});
+
+actBtn.addEventListener('click', () => {
+  // "Kopyalandı" şovu yok: pencere okunacak kadar bile durmadan gidiyor,
+  // ve kopyalamanın kendisi zaten onayın ta kendisi. Tıklama anında
+  // hissedilsin diye kayma şimdi başlıyor.
+  const copy = actBtn.textContent === COPY;
+  wrap.classList.remove('in');
+  window.typer.dismiss(copy);
+});
+</script>

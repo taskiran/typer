@@ -1,0 +1,35 @@
+Typer
+Copyright (C) 2026 Bertan Taskiran
+
+Bu ürün backtalk'tan türetilmiştir:
+    backtalk — https://github.com/jaredrhod/backtalk
+    Copyright (C) 2026 Jared Rhodenizer
+    AGPL-3.0-or-later
+
+backtalk'tan türeyen dosyalar, her birinin başlığında ayrıca belirtilir:
+    engine/typer_engine/hotkey.py    (backtalk/ptt.py)
+    engine/typer_engine/stt.py       (backtalk/ears.py)
+    engine/typer_engine/silence.py   (backtalk/ducking.py)
+    engine/typer_engine/paste.py     (backtalk/dictate.py)
+    engine/typer_engine/focus.py     (backtalk/dictate.py)
+    engine/typer_engine/config.py    (backtalk/config.py)
+    engine/typer_engine/app.py       (backtalk/dictate.py)
+
+backtalk AGPL-3.0-or-later ile lisanslıdır, ve bu lisans türetilmiş
+çalışmaların da aynı lisansla dağıtılmasını şart koşar. Typer bu yüzden
+AGPL-3.0-or-later'dır ve kaynağı açıktır. Bkz. LICENSE.
+
+Bu, Typer'ı bir şirket içinde kullanmayı hiçbir şekilde kısıtlamaz.
+Kısıtladığı tek şey, DEĞİŞTİRİLMİŞ bir sürümü kaynağını vermeden
+DAĞITMAKTIR — ister ikili dosya olarak, ister ağ üzerinden bir hizmet
+olarak. Kendi makinende ya da takımın makinelerinde çalıştırmak dağıtım
+değildir.
+
+Çalışma zamanı bağımlılıklarının kendi lisansları vardır ve bu dosyanın
+kapsamında değildir; başlıcaları:
+    faster-whisper (MIT), CTranslate2 (MIT)
+    Whisper model ağırlıkları — OpenAI, MIT
+    sounddevice (MIT), PortAudio (MIT)
+    pynput (LGPL-3.0), pyperclip (BSD-3-Clause)
+    uiautomation (Apache-2.0), pycaw (MIT), psutil (BSD-3-Clause)
+    Electron (MIT)

@@ -1,0 +1,6 @@
+# Bu depo iki isletim sisteminde birden calisiyor. Satir sonlarini depoda
+# LF'te sabitlemek, bir Mac'te checkout edilen Python dosyasinin CRLF ile
+# gelmesini ve bir gun anlasilmaz bir sekilde kirilmasini engeller.
+* text=auto eol=lf
+
+*.png binary

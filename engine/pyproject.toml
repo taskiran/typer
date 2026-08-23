@@ -1,0 +1,40 @@
+[project]
+name = "typer-engine"
+version = "1.0.0"
+description = "Typer'in motoru: kisayol, mikrofon, yerel konusma tanima ve imlece yapistirma."
+requires-python = ">=3.10,<3.14"
+license = "AGPL-3.0-or-later"
+dependencies = [
+    # Yerel konusma tanima. Modeli sureç içinde çalistirir; ses hiçbir
+    # zaman bu makineden çikmaz.
+    "faster-whisper>=1.0.0",
+    "numpy>=1.26.0",
+    # Mikrofon (PortAudio). Windows, macOS ve Linux'ta ayni arayuz.
+    "sounddevice>=0.5.0",
+    # Metin pano uzerinden gider: harf harf yazmak pek çok klavye
+    # duzeninde ASCII disini bozar, ve Turkçede bu kelimelerin çogu demek.
+    "pyperclip>=1.8.2",
+    # Kuresel kisayol dinleyicisi + yapistirma tusu.
+    "pynput>=1.8.0",
+
+    # --- yalnizca Windows ---------------------------------------------
+    # Odaktaki ogeyi okur, boylece dikte yazacak bir yer olup olmadigini
+    # bilir. Win32 kareti Chromium uygulamalarina kordur.
+    "uiautomation>=2.0.18; sys_platform == 'win32'",
+    # Mikrofon açikken diger uygulamalari tek tek susturur.
+    "pycaw>=20240210; sys_platform == 'win32'",
+    "psutil>=5.9.0; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+# NVIDIA ekran karti olanlar için: CTranslate2 bu kutuphaneleri çalisma
+# aninda arar. Bir gigabaytin uzerinde yer kaplarlar, o yuzden varsayilan
+# kuruluma DAHIL DEGILLER — GPU isteyen `uv sync --extra gpu` der.
+# macOS'ta CUDA yoktur ve bu ekstra oradan zaten kurulamaz.
+gpu = [
+    "nvidia-cublas-cu12; sys_platform == 'win32'",
+    "nvidia-cudnn-cu12; sys_platform == 'win32'",
+]
+
+[tool.uv]
+package = false

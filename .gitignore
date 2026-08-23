@@ -1,0 +1,24 @@
+# Electron ve bagimlilik agaci: ~270 MB, `npm install` ile geri gelir.
+node_modules/
+
+# Python sanal ortami ve derlenmis onbellek.
+engine/.venv/
+__pycache__/
+*.pyc
+
+# Calisma ciktisi: motor ve arayuz gunlukleri, --shot yakalamalari.
+logs/
+*.png.shot
+
+# Sustugumuz uygulamalarin listesi. Yalnizca mikrofon acikken var olur;
+# diskte kalmis bir kopya, cokmeden sonra sesi geri acmak icindir.
+.typer-silenced.json
+
+# Isletim sistemi artiklari.
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Kisisel ayarlar. Ilk calistirmada typer.example.json kopyalanarak
+# olusturulur; kimsenin kendi kisayolu baskasinin deposuna dusmez.
+/typer.json

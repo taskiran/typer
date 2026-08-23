@@ -1,0 +1,17 @@
+{
+  "hotkey": "ctrl+win",
+  "mode": "toggle",
+  "language": ["tr", "en"],
+
+  "model": "auto",
+  "device": "auto",
+  "compute": "auto",
+
+  "sounds": true,
+  "mute_others": true,
+  "max_seconds": 180,
+
+  "start_at_login": true,
+
+  "_note": "Her anahtarin ne yaptigi engine/typer_engine/config.py icinde tek tek yazili. 'auto' olanlar donanima gore acilir: NVIDIA ekran karti varsa large-v3/float16, yoksa small/int8. Kisayol sozdizimi: 'ctrl+win', 'win+6', 'f13'. macOS'ta 'win' Command tusudur."
+}

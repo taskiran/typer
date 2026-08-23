@@ -1,0 +1,19 @@
+{
+  "name": "typer",
+  "version": "1.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "description": "Bir tuşa bas, konuş, yazı imlecinin olduğu yere düşsün. Tamamen yerel çalışan dikte.",
+  "main": "ui/main.js",
+  "scripts": {
+    "start": "electron .",
+    "setup": "cd engine && uv sync",
+    "setup:gpu": "cd engine && uv sync --extra gpu",
+    "doctor": "cd engine && uv run python -m typer_engine doctor",
+    "engine": "cd engine && uv run python -m typer_engine",
+    "icon": "node tools/make-icon.mjs"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}
