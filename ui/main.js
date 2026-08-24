@@ -154,7 +154,13 @@ function startEngine() {
       // öldürebilelim: `uv run python` iki süreçtir ve yalnızca üsttekini
       // öldürmek mikrofonu ve kısayolu ayakta bırakır.
       detached: !IS_WIN,
-      stdio: ['ignore', 'pipe', errFd],
+      // stdin bir BORU, ve icine hicbir sey yazilmiyor. Tek isi
+      // olmek: bu surec oldugunde boru kapanir, motor da EOF'u
+      // gorup kendini indirir. Windows'ta cocuk surecler
+      // ebeveynleriyle birlikte olmez, ve arayuzu gorev
+      // yoneticisinden kapatmak modeli ve kisayolu elinde tutan
+      // gorunmez bir motor birakirdi.
+      stdio: ['pipe', 'pipe', errFd],
     });
   } catch (e) {
     log(`spawn hatası: ${e.message}`);
@@ -231,6 +237,10 @@ function childEnv() {
   // Python'un stdout'u boruya bağlıyken blok tamponlamasını kapat, yoksa
   // ölçer verisi 4 KB'lık paketler hâlinde ve saniyeler geç gelir.
   env.PYTHONUNBUFFERED = '1';
+  // Motora stdin'i bir ebeveyn-olum sinyali olarak izlemesini soyler.
+  // Elle terminalden calistirilan bir motor bunu gormez ve stdin'i
+  // klavye olarak birakir, ki dogrusu odur.
+  env.TYPER_PARENT_PIPE = '1';
   return env;
 }
 

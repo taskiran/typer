@@ -169,6 +169,10 @@ def main():
         return
 
     app = Typer()
+    # Arayüz sert bir şekilde ölürse biz de inelim — ama önce sustuğumuz
+    # uygulamaları geri açarak. Sessiz kalmış bir makine, hangi programın
+    # yaptığı belli olmadığı için teşhis edilmesi en zor arızalardan biri.
+    single.watch_parent(on_death=app.shutdown)
     try:
         app.run()
     except KeyboardInterrupt:

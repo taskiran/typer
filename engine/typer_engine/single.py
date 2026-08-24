@@ -23,9 +23,52 @@ ve o port bir gün başka birinin geçici bağlantısına düşerdi. Bu ikisinde
 import os
 import sys
 import tempfile
+import threading
 
 _NAME = "TyperEngineSingleInstance"
 _held = None            # kilidi canlı tutan tutamak; asla çöpe atılmamalı
+
+# Arayüz bunu koyar. Motoru elle terminalden çalıştıran biri koymaz, ve
+# koymamalı: orada stdin senin klavyendir, ve onu "ebeveyn öldü" sinyali
+# saymak yanlış olur.
+PARENT_PIPE_ENV = "TYPER_PARENT_PIPE"
+
+
+def watch_parent(on_death=None):
+    """Arayüz ölürse motoru da indir.
+
+    Tek kopya kilidi motorların ÜST ÜSTE binmesini engelliyor, ama tek
+    başına yetmiyor: arayüz sert bir şekilde öldürülürse (görev
+    yöneticisi, çökme, oturum kapanışı) çocuk süreç Windows'ta hayatta
+    kalır — modeli de kısayolu da elinde tutarak, görünmez biçimde.
+
+    Tespit stdin üzerinden yapılıyor. Arayüz motora bir stdin borusu
+    veriyor ve ona hiçbir şey yazmıyor; o boru yalnızca ve yalnızca
+    arayüzün süreci bittiğinde kapanır. Okuma EOF döndüğü an ebeveyn
+    gitmiştir. Bir pid'i yoklamaktan daha güvenilir — pid'ler geri
+    dönüştürülür, kapanan boru dönüştürülmez.
+    """
+    if os.environ.get(PARENT_PIPE_ENV) != "1":
+        return
+
+    def _wait():
+        try:
+            while sys.stdin.readline():
+                pass          # arayüz konuşmuyor; okunan her şey yok sayılır
+        except Exception:
+            pass
+        if on_death is not None:
+            try:
+                on_death()
+            except Exception:
+                pass
+        # os._exit: normal çıkış, kayıt döngüsünün bir sonraki mikrofon
+        # okumasında takılabilecek atexit ve iplik toparlamalarını
+        # bekler. Ebeveyni gitmiş bir motorun bekleyecek vakti yok.
+        os._exit(0)
+
+    t = threading.Thread(target=_wait, daemon=True)
+    t.start()
 
 
 def claim() -> bool:
