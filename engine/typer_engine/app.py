@@ -6,7 +6,7 @@ import sys
 import threading
 import time
 
-from typer_engine import blips, focus, meter, paste
+from typer_engine import blips, focus, meter, paste, single
 from typer_engine.bus import emit, log
 from typer_engine.config import CFG
 from typer_engine.hotkey import Hotkey, describe, warn_if_blocked
@@ -159,6 +159,15 @@ class Typer:
 
 
 def main():
+    # Model belleğe girmeden ÖNCE: ikinci bir motor, ilkinin üstüne
+    # birkaç gigabaytlık bir model daha yükler ve aynı kısayolu dinleyip
+    # her basışta iki mikrofon birden açmaya çalışır.
+    if not single.claim():
+        log("[typer] başka bir Typer motoru zaten çalışıyor — bu kopya "
+            "çıkıyor. (Öyle olmadığını düşünüyorsan görev yöneticisinde "
+            "'typer_engine' geçen python süreçlerine bak.)")
+        return
+
     app = Typer()
     try:
         app.run()
