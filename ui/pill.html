@@ -14,7 +14,11 @@
   beslenir: sessizlik düzdür, ve konuştuğun gibi hareket eder.
 
   Zifiri siyah üstüne beyaz, çünkü OLED bir panelde var olan en yüksek
-  kontrast çifti budur ve çubuklar 3.75 pikselde bile okunur kalır.
+  kontrast çifti budur ve çubuklar 3 pikselde bile okunur kalır.
+
+  Solda duran işaret `mark.svg`'dir ve ELLE ÇİZİLMEZ: marka kitinden
+  üretilir (npm run brand). Harf orada değişince buradaki de değişir,
+  ikisinin ayrışması mümkün olmasın diye.
 -->
 <style>
   html, body {
@@ -99,8 +103,10 @@
   #act:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 2px; }
 
   #pill {
-    display: flex; align-items: center;
-    padding: 7px 15px;
+    display: flex; align-items: center; gap: 8px;
+    /* Sol boşluk dar: işaretin kendi zemini var, kapsülün iç boşluğunu
+       bir kez daha eklemek onu ortadan kaçırıyor. */
+    padding: 7px 14px 7px 8px;
     will-change: transform, opacity;
     border-radius: 999px;
     background: #000;
@@ -108,6 +114,16 @@
     box-shadow: 0 8px 26px rgba(0,0,0,.8);
   }
   body.card #pill { display: none; }
+
+  /* İşaret KAPSÜLÜ BÜYÜTMEZ: ölçer tam onun kapladığı kadar daralır,
+     kapsülün eni 164 pikselde kalır (24 + 8 boşluk = 32, ölçer 132'den
+     108'e). Kapsül ekranın altında duran küçük bir şey; büyümesi onu
+     bir bildirime çevirirdi. */
+  #mark {
+    width: 24px; height: 24px;
+    display: block; flex: none;
+    -webkit-user-drag: none;
+  }
   #meter { display: block; }
 
   @media (prefers-reduced-motion: reduce) {
@@ -124,7 +140,8 @@
     <button id="act" type="button">Kopyala</button>
   </div>
   <div id="pill">
-    <canvas id="meter" width="132" height="26"></canvas>
+    <img id="mark" src="mark.svg" alt="" draggable="false">
+    <canvas id="meter" width="108" height="26"></canvas>
   </div>
 </div>
 
