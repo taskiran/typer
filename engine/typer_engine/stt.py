@@ -53,13 +53,105 @@ _PHANTOMS = {
 _TR_FOLD = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosuCGIOSU")
 
 
+# Cümle sonu: nokta, ünlem, soru, üç nokta. Ayırıcı cümlede kalır.
+_SENT_SPLIT = re.compile(r"(?<=[.!?…])\s+")
+
+
+
 def _is_phantom(text: str) -> bool:
     """Çeviri, Whisper'ın stok halüsinasyonlarından biri ve yalnızca o mu?
+
     Aksanı sadeleştirilmiş ve noktalamadan arındırılmış olarak bakılır,
-    çünkü model iki koşuda aynı cümleyi farklı şapkalarla döndürür."""
-    t = text.translate(_TR_FOLD).lower()
+    çünkü model iki koşuda aynı cümleyi farklı şapkalarla döndürür.
+
+    TEKRARLANMIŞ hayalet de hayalettir. Sessizliğe "Thank you. Thank you."
+    diyen bir koşu, bütünüyle bakıldığında listeye uymaz ve ekrana
+    düşerdi. Bütün cümleler aynıysa tek kopyası neyse metin de odur.
+    (İki kopya _collapse_loops'un eşiğinin altında kalır — orada eşik
+    yüksek, çünkü orası kullanıcının GERÇEK sözünü kırpıyor. Burası
+    yalnızca bir karar veriyor, metne dokunmuyor.)
+    """
+    def sade(x: str) -> str:
+        t = x.translate(_TR_FOLD).lower()
+        t = "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in t)
+        return " ".join(t.split())
+
+    if sade(text) in _PHANTOMS:
+        return True
+    cumleler = {sade(c) for c in _SENT_SPLIT.split(text) if sade(c)}
+    return len(cumleler) == 1 and cumleler.pop() in _PHANTOMS
+
+
+def _fold(s: str) -> str:
+    """Karşılaştırma için sadeleştir: aksan, noktalama, büyük harf gitsin.
+    Model aynı cümleyi iki tekrarda farklı şapkalarla döndürebiliyor."""
+    t = s.translate(_TR_FOLD).lower()
     t = "".join(ch if ch.isalnum() or ch.isspace() else " " for ch in t)
-    return " ".join(t.split()) in _PHANTOMS
+    return " ".join(t.split())
+
+
+def _collapse_loops(text: str) -> str:
+    """Arka arkaya tekrarlanan cümleyi/öbeği tek kopyaya indir.
+
+    EMNİYET AĞI. Asıl düzeltme transcribe() çağrısındadır; burası ondan
+    sızanı yakalar, tıpkı _PHANTOMS'ın yaptığı gibi. Whisper tek bir
+    pencerenin içinde de kilitlenebiliyor ve sıcaklık merdiveni her
+    seferinde kurtarmıyor.
+
+    EŞİKLER GENİŞ TUTULDU, çünkü meşru tekrar vardır: "evet, evet" ya da
+    "çok çok güzel" insanların gerçekten söylediği şeyler. Aynı cümlenin
+    ÜÇ kez, aynı kelime öbeğinin DÖRT kez arka arkaya gelmesi ise artık
+    konuşma değil, modelin takılmasıdır.
+    """
+    atilan = 0
+
+    # -- cümle düzeyi: "... lazım. ... lazım. ... lazım." (üç ve fazlası)
+    parts = _SENT_SPLIT.split(text)
+    out, i = [], 0
+    while i < len(parts):
+        j = i + 1
+        while j < len(parts) and _fold(parts[j]) == _fold(parts[i]):
+            j += 1
+        if j - i >= 3:
+            out.append(parts[i])
+            atilan += j - i - 1
+        else:
+            out.extend(parts[i:j])
+        i = j
+    text = " ".join(out)
+
+    # -- kelime düzeyi: noktalama hiç yoksa cümleye bölünemiyor.
+    #    1..8 kelimelik bir blok dört ve daha fazla kez tekrarlanıyorsa
+    #    bir kopyası bırakılır.
+    w = text.split()
+    out, i = [], 0
+    while i < len(w):
+        en_iyi = None
+        for n in range(1, 9):
+            if i + 2 * n > len(w):
+                break
+            blok = w[i:i + n]
+            k = 1
+            while w[i + k * n:i + (k + 1) * n] == blok:
+                k += 1
+            # Tek kelimede eşik daha yüksek: "çok çok çok" ya da
+            # "no no no no" insanların gerçekten söylediği şeyler.
+            esik = 5 if n == 1 else 4
+            if k >= esik and (en_iyi is None or k * n > en_iyi[0] * en_iyi[1]):
+                en_iyi = (k, n)
+        if en_iyi:
+            k, n = en_iyi
+            out.extend(w[i:i + n])
+            atilan += (k - 1) * n
+            i += k * n
+        else:
+            out.append(w[i])
+            i += 1
+    text = " ".join(out)
+
+    if atilan:
+        log(f"[stt] tekrar döngüsü toplandı ({atilan} yinelenen parça atıldı)")
+    return text
 
 
 _model = None
@@ -187,11 +279,42 @@ def transcribe(pcm: np.ndarray) -> str:
     lang = ("en" if str(BACKEND["model"]).endswith(".en")
             else _choose_language(model, audio))
     with _use_lock:
-        segments, _ = model.transcribe(audio, temperature=0.0, language=lang)
+        segments, _ = model.transcribe(
+            audio, language=lang,
+            # SICAKLIK MERDİVENİ, tek bir 0.0 DEĞİL.
+            #
+            # Whisper'ın tekrar döngüsüne karşı kendi savunması budur:
+            # bir pencerenin çıktısı fazla tekrarlıysa (gzip sıkıştırma
+            # oranı 2.4'ün üstünde) ya da olasılığı düşükse, aynı pencere
+            # bir üst sıcaklıkla yeniden çözülür. faster_whisper kaynağı:
+            #
+            #     for temperature in options.temperatures:
+            #         ...
+            #         if compression_ratio > threshold:
+            #             needs_fallback = True   # too repetitive
+            #         if not needs_fallback: break
+            #
+            # `temperature=0.0` vermek bu listeyi TEK ELEMANLI yapıyordu:
+            # dedektör ateşleniyor, deneyecek başka sıcaklık bulamıyor ve
+            # tekrarlı çıktı olduğu gibi dönüyordu. Merdiven 0.0'dan
+            # başladığı için normal cümleler hiçbir şey kaybetmez —
+            # yalnızca bozuk çıkan pencere ikinci bir şans alır.
+            temperature=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            # PENCERELER ARASI İSTEM TAŞIMA KAPALI.
+            #
+            # Açıkken her 30 saniyelik pencere bir öncekinin metnini istem
+            # olarak alır. Bir döngü başladığında o döngü bir sonraki
+            # pencerenin istemi olur ve kendini çoğaltır — "aynı cümle
+            # ondokuz kez" arızasının uzun diktelerde ortaya çıkmasının
+            # sebebi buydu. Dikte tek bir söz öbeğidir; pencereler arası
+            # bağlam onun için kazanç değil, risktir.
+            condition_on_previous_text=False,
+        )
         segments = list(segments)   # kilidin içinde boşalt: bu bir üreteç
                                     # ve asıl iş gezinirken oluyor
     text = "".join(s.text for s in segments).strip()
     text = _NONSPEECH.sub("", text).strip()
+    text = _collapse_loops(text)
     if text and _is_phantom(text):
         log(f"[stt] hayalet çeviri ({text!r}) — atıldı")
         return ""
