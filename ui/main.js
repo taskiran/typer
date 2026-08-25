@@ -470,9 +470,9 @@ function refreshTray(note) {
 }
 
 function buildMenu() {
-  const login = IS_MAC
-    ? app.getLoginItemSettings()
-    : app.getLoginItemSettings({ name: 'Typer' });
+  // Windows'ta iki mekanizma var (kayıt defteri + başlangıç kısayolu);
+  // kutucuk ikisinden birine bakar, çünkü açık olması için biri yeter.
+  const acilista = autoStartOn();
 
   return Menu.buildFromTemplate([
     { label: `Typer — ${LABELS[state] || state}`, enabled: false },
@@ -497,12 +497,28 @@ function buildMenu() {
     {
       label: IS_MAC ? 'Açılışta başlat' : 'Windows ile başlat',
       type: 'checkbox',
-      checked: !!login.openAtLogin,
+      checked: acilista,
       click: (item) => { setAutoStart(item.checked); refreshTray(); },
     },
     { type: 'separator' },
     { label: "Typer'dan çık", click: () => { app.isQuitting = true; app.quit(); } },
   ]);
+}
+
+/** Windows Başlangıç klasöründeki kısayolun tam yolu. */
+function startupLink() {
+  return path.join(app.getPath('appData'), 'Microsoft', 'Windows',
+                   'Start Menu', 'Programs', 'Startup', 'Typer.lnk');
+}
+
+/** Açılışta başlatma AÇIK mı? İki mekanizmadan biri yeterli. */
+function autoStartOn() {
+  try {
+    if (IS_WIN && fs.existsSync(startupLink())) return true;
+  } catch (_) {}
+  try {
+    return !!app.getLoginItemSettings({ name: 'Typer' }).openAtLogin;
+  } catch (_) { return false; }
 }
 
 function setAutoStart(on) {
@@ -525,6 +541,46 @@ function setAutoStart(on) {
     path: process.execPath,
     args: app.isPackaged ? [] : [ROOT],
   });
+
+  if (!IS_WIN) return;
+
+  // BAŞLANGIÇ KLASÖRÜ, kayıt defterine EK OLARAK.
+  //
+  // Ölçüldü: Run girdisi yerinde dururken (anahtarın son yazılması
+  // açılıştan bir gün önceydi) Windows onu açılışta ÇALIŞTIRMADI.
+  // Kabuğun kendi günlüğü (Shell-Core/Operational, olay 9707) o
+  // açılışta dokuz komutu tek tek sayıyor ve Typer onların arasında
+  // yok; 208 olayın hiçbirinde "electron" geçmiyor. Typer, Windows'un
+  // başlangıç girdilerini onayladığı StartupApproved listesinde de hiç
+  // görünmüyor — çalışan her uygulamanın orada bir kaydı varken.
+  //
+  // Sebebini Windows tarafında kesin olarak belirleyemedim, o yüzden
+  // tek mekanizmaya güvenmiyorum. Kısayol ikinci bir yol açar ve
+  // ikisinin birden çalışması zararsızdır: tek kopya kilidi ikinciyi
+  // sessizce kapatır (bkz. requestSingleInstanceLock).
+  //
+  // Kısayolun bir yan faydası da görünürlük: kullanıcı onu klasörde
+  // görür ve isterse siler. Kayıt defteri girdisi görünmez.
+  try {
+    const lnk = startupLink();
+    if (on) {
+      fs.mkdirSync(path.dirname(lnk), { recursive: true });
+      const ico = path.join(ROOT, 'visuals', 'app-icons', 'favicon.ico');
+      shell.writeShortcutLink(lnk, 'create', {
+        target: process.execPath,
+        args: app.isPackaged ? '' : `"${ROOT}"`,
+        cwd: ROOT,
+        description: 'Typer — bir tuşa bas, konuş, yazı imlecine düşsün',
+        ...(fs.existsSync(ico) ? { icon: ico, iconIndex: 0 } : {}),
+      });
+      log(`başlangıç kısayolu yazıldı: ${lnk}`);
+    } else if (fs.existsSync(lnk)) {
+      fs.unlinkSync(lnk);
+      log('başlangıç kısayolu silindi');
+    }
+  } catch (e) {
+    log(`başlangıç kısayolu yazılamadı: ${e.message}`);
+  }
 }
 
 /* ------------------------------------------------------------------ */
