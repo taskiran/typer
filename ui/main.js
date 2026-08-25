@@ -318,6 +318,31 @@ function createWindow() {
   // uygulama bunu gömemesin.
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  // ÇİZİCİ ÖLÜRSE pencere yaşamaya devam eder ama içine kimse çizmez:
+  // geriye saydam bir dikdörtgen kalır. Kapsül hiç görünmez, üstelik
+  // durum satırları sorunsuzmuş gibi akmaya devam eder — yani arıza
+  // loglara "her şey yolunda" diye yazılır. Motorun çökünce yeniden
+  // başlatılması zaten var; arayüzün yoktu.
+  let cokme = 0;
+  win.webContents.on('render-process-gone', (_e, detay) => {
+    cokme++;
+    log(`kapsül çizicisi öldü (${detay && detay.reason}) — ${cokme}. kez`);
+    if (win && !win.isDestroyed() && cokme <= 3) {
+      win.reload();
+    } else {
+      // Israrla ölüyorsa pencerenin kendisi bozulmuştur; baştan kur.
+      try { if (win && !win.isDestroyed()) win.destroy(); } catch (e) {}
+      win = null;
+      cokme = 0;
+      createWindow();
+      const geri = state;
+      state = 'idle';               // setState'in değişimi görmesi için
+      win.webContents.once('did-finish-load', () => setState(geri));
+    }
+  });
+  win.on('unresponsive', () => log('kapsül yanıt vermiyor'));
+
   win.loadFile(path.join(UI_DIR, 'pill.html'));
 }
 
@@ -341,7 +366,6 @@ function setState(next, payload) {
 
   if (next !== state) {
     state = next;
-    log(`durum ${next}`);
     if (next === 'idle') {
       if (hideTimer) clearTimeout(hideTimer);
       hideTimer = setTimeout(() => {
@@ -354,7 +378,38 @@ function setState(next, payload) {
       win.setBounds(place(card ? 'card' : 'listening'));
       win.setIgnoreMouseEvents(!card, { forward: true });
       if (!win.isVisible()) win.showInactive();   // asla odak almaz
+      // "EN ÜSTTE"Yİ HER GÖSTERİMDE YENİDEN UYGULA.
+      //
+      // Ölçüldü, tahmin değil: kapsül gizliyken kullanıcı bir uygulamaya
+      // tıklayınca o pencere öne alınır; kapsül tekrar açıldığında
+      // `showInactive` onu ESKİ z-yerinde geri açar, "her zaman üstte"
+      // bandının tepesine taşımaz. Sonuç, z-sırası yürünerek görüldü:
+      // WS_EX_TOPMOST biti pencerenin üzerinde dururken bile Excel,
+      // Chrome, WhatsApp ve Discord kapsülün ÜSTÜNDE kalıyordu.
+      //
+      // Bayrağa bakmak bu arızayı gizler: `isAlwaysOnTop()` true der ve
+      // pencere yine altta durur. Bandı bırakıp yeniden almak onu
+      // gerçekten tepeye koyar; `moveTop` da bandın içinde en öne alır.
+      //
+      // Masaüstünde sorun görünmezdi, çünkü orada kapsülün üstünde
+      // zaten hiçbir pencere olmuyor — arızanın "sadece uygulamalarda"
+      // ortaya çıkmasının sebebi buydu.
+      win.setAlwaysOnTop(false);
+      win.setAlwaysOnTop(true, 'screen-saver');
+      win.moveTop();
     }
+    // Log GÖSTERDİKTEN SONRA yazılır. Önce yazılsaydı `görünür` her
+    // seferinde false çıkardı ve bu satır, teşhis etmesi için var olduğu
+    // arızanın ta kendisini uydururdu. "durum listening" tek başına da
+    // yalan söyleyebiliyor: ana süreç mesajı alır, pencere yerindedir,
+    // ve ekranda hiçbir şey yoktur — o yüzden pencerenin gerçek hâli de
+    // yazılıyor.
+    log(next === 'idle' ? 'durum idle' : (() => {
+      const b = win.getBounds();
+      return `durum ${next}  pencere ${b.width}x${b.height} @${b.x},${b.y} ` +
+        `görünür=${win.isVisible()} ` +
+        `çizici=${win.webContents.isCrashed() ? 'ÖLÜ' : 'canlı'}`;
+    })());
     refreshTray();
   }
   win.webContents.send('typer:state', payload || { state: next });
