@@ -89,10 +89,18 @@ class Typer:
         emit("listening", meter.level(mono), bands=meter.spectrum(mono))
 
     def _on_stop(self):
-        """Mikrofon şimdi kapandı. Kapsülü ekrandan ŞİMDİ kaldır ve
-        kapanış blibini ŞİMDİ çal — çevirinin daha yüzlerce milisaniyesi
-        var, ve onu beklemek tuşu ölü hissettirir."""
-        emit("idle")
+        """Mikrofon şimdi kapandı: ölçer sussun, kapanış blibi ŞİMDİ çalsın.
+
+        Kapsül burada KAPANMAZ, "çeviriyor"a geçer. Uzun bir diktede
+        çeviri saniyeler sürüyor ve kapsülün o an yok olması, kelimelerin
+        kaybolduğu izlenimini veriyordu — tuş işledi mi işlemedi mi belli
+        değil. Artık işaret ve bir yükleniyor halkası kalıyor; kapsül
+        metin yapıştırıldığında kapanıyor.
+
+        Blip yine ŞİMDİ çalar, çevirinin sonunda değil: kaydın bittiği an
+        odur, ve sesi geciktirmek tuşu ölü hissettirir.
+        """
+        emit("thinking")
         blips.end()
 
     # ---------------------------------------------------------------- döngü

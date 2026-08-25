@@ -454,7 +454,7 @@ function trayIcon() {
 }
 
 const LABELS = {
-  idle: 'boşta', listening: 'dinliyor',
+  idle: 'boşta', listening: 'dinliyor', thinking: 'çeviriyor',
   preview: 'metin bekliyor', error: 'hata',
 };
 
