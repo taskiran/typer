@@ -77,6 +77,11 @@ class Typer:
         """Kare başına ölçer beslemesi. Kısıtlıdır: arayüz değerler
         arasında yumuşatma yapıyor, saniyede ~30'dan fazlası yalnızca
         boru trafiği satın alır."""
+        # Kayıt sürerken oynatıcıyı yokla: kullanıcı bu sırada Spotify'da
+        # elle oynat'a bastıysa müzik artık bizim değildir ve kayıt
+        # bitince ona dokunmamalıyız. İçeride 250 ms'ye kısılıyor,
+        # kısıtlamadan ÖNCE çağrılıyor ki ölçer kısıtı onu da yutmasın.
+        self.silencer.tick()
         now = time.time()
         if now - self._last_meter < _METER_INTERVAL:
             return
@@ -107,9 +112,13 @@ class Typer:
         blips.start()                    # mikrofon açılmadan ÖNCE biter
         emit("listening", 0.0)
         meter.reset()                    # ölçer her kayıtta yeniden ayarlanır
-        self.silencer.start()            # önce odayı sustur
         started = time.time()
         try:
+            # Susturma try'ın İÇİNDE: dışarıda kalırsa buradan çıkan bir
+            # istisna `finally: silencer.end()` satırını hiç çalıştırmaz
+            # ve her şey susturulmuş, Spotify duraklamış kalır — bir
+            # sonraki başarılı kayda kadar.
+            self.silencer.start()        # önce odayı sustur
             text = record(self.hotkey.is_held, max_s=self._max_s,
                           on_frame=self._on_frame, on_stop=self._on_stop)
         finally:

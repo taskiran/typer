@@ -9,6 +9,7 @@
 
   "sounds": true,
   "mute_others": true,
+  "pause_spotify": true,
   "max_seconds": 180,
 
   "start_at_login": true,

@@ -94,7 +94,10 @@ Kısayol bir **anahtar/kilit**tir, basılı tutulmaz: bir bas konuş, bir bas
 bitir. Arada tuş serbest olduğu için iki elin de klavyede kalır.
 
 Mikrofon açıkken diğer uygulamalar susturulur, ki arkada çalan müzik ya
-da video kaydın içine karışmasın.
+da video kaydın içine karışmasın. Spotify susturulmaz, **duraklatılır**:
+susturulmuş müzik çalmaya devam eder ve bir dakikalık dikte şarkının bir
+dakikasını yutar. Kayıt bitince kaldığı yerden devam eder — ve senin
+kendi duraklattığın müzik asla kendiliğinden çalmaz.
 
 ---
 
@@ -116,6 +119,7 @@ tek tek yazılı.
   "device": "auto",           // auto | cuda | cpu
   "sounds": true,             // açılış/kapanış blipleri
   "mute_others": true,        // mikrofon açıkken odayı sustur
+  "pause_spotify": true,      // Spotify'ı susturmak yerine duraklat
   "max_seconds": 180,         // tek kayıt emniyet sınırı
   "start_at_login": true
 }
@@ -160,7 +164,8 @@ Mac'te ayrıca:
   Apple Silicon dahil. `"auto"` bu yüzden `small`'a düşer; `large-v3`
   CPU'da dikte için kullanılamayacak kadar yavaştır.
 - **Susturma sınırlı.** macOS uygulama başına susturma sunmaz, o yüzden
-  yalnızca Music ve Spotify kısılır.
+  yalnızca Music kısılır. (Spotify iki işletim sisteminde de kısılmaz,
+  duraklatılır.)
 
 ---
 

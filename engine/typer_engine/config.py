@@ -80,10 +80,24 @@ DEFAULTS = {
     # Mikrofon açıkken diğer uygulamaları sustur, ki müzik ya da video
     # kaydın içine karışmasın.
     #   Windows: her uygulama tek tek susturulur (WASAPI oturum sesi).
-    #   macOS:   yalnızca Music ve Spotify kısılır — işletim sistemi
-    #            uygulama başına susturma sunmaz.
+    #   macOS:   yalnızca Music kısılır — işletim sistemi uygulama
+    #            başına susturma sunmaz.
     # Kendi sürecimiz ve çocukları asla susturulmaz.
     "mute_others": True,
+
+    # Spotify'ı susturmak yerine DURAKLAT. Susturulmuş bir Spotify
+    # çalmaya devam eder: bir dakikalık dikte, şarkının bir dakikasını
+    # yutar. Kayıt bitince müzik kaldığı yerden devam eder.
+    #
+    # Kullanıcının kendi duraklattığı müzik ASLA kendiliğinden çalmaz:
+    # yalnızca bizim duraklattığımız, hâlâ duraklı duran Spotify
+    # sürdürülür. Spotify kapalıysa hiçbir şey yapılmaz ve asla
+    # açılmaz.
+    #
+    # mute_others kapalıysa bu da çalışmaz: o düğme "başka
+    # uygulamaların sesine dokunma" demektir ve duraklatma da ona
+    # dokunmaktır.
+    "pause_spotify": True,
 
     # Metni imlece yapıştır. False yaparsan Typer yalnızca panoya kopyalar
     # ve hiçbir tuşa basmaz.
