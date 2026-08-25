@@ -1,0 +1,71 @@
+{
+  "name": "Typer",
+  "tagline": "Bir tuşa bas, konuş, yazı imlecinin olduğu yere düşsün.",
+  "colors": {
+    "ink": "#0A0A0A",
+    "inkRaise": "#1E1E1C",
+    "acid": "#D2F53C",
+    "acidHi": "#E6FF7A",
+    "moss": "#5A7300",
+    "paper": "#F4F4F1",
+    "line": "#E4E4DE",
+    "mute": "#6E6E66",
+    "mist": "#A9A9A1",
+    "white": "#FFFFFF"
+  },
+  "contrast": {
+    "acid / ink": 15.9,
+    "ink / paper": 17.97,
+    "moss / paper": 4.9,
+    "mute / paper": 4.66,
+    "mist / ink": 8.37,
+    "note": "acid açık zeminde METİN olarak kullanılmaz (1.13). Açık zeminde asit gerektiğinde moss kullanılır."
+  },
+  "typography": {
+    "mark": "Elle çizilmiş bezier yolları.",
+    "logotype": "Modern Sans Serif 7 (Style-7, styleseven.com), 12 derece eğimle vektör yoluna çevrildi, harf aralığı -0.015 em.",
+    "credit": "Ücretsiz yazılımda kullanım künyede kredi ister; ticari kullanım için lisans gerekir.",
+    "fontDependency": "YOK — font hiçbir çıktının içinde taşınmaz, harfler bir kez yola çevrildi.",
+    "ui": "Ürün arayüzü işletim sisteminin kendi arayüz fontunu kullanır."
+  },
+  "mark": {
+    "coordinateSpace": "0 0 32 32",
+    "tileRadius": 9,
+    "fill": 0.72,
+    "bbox": {
+      "x1": 9.883,
+      "y1": 4.48,
+      "x2": 22.117,
+      "y2": 27.52
+    },
+    "note": "Kare işaretteki t, logotype'ın t'siyle aynı yoldur — aynı fonttan, aynı eğimle, tek üretimde çıkar."
+  },
+  "wordmark": {
+    "bbox": {
+      "x1": 7.27,
+      "y1": -68.36,
+      "x2": 233.531,
+      "y2": 24.41
+    },
+    "metrics": {
+      "baseline": 0,
+      "xHeight": 43.945,
+      "ascender": 68.359,
+      "descender": 24.41
+    },
+    "slant": 12,
+    "track": -0.015
+  },
+  "lockup": {
+    "note": "Yatay kilitte kelimenin x-yüksekliği bandı fayansla BİREBİR aynı yüksekliktedir; t'nin çıkıntısı ile y ve p'nin kuyrukları bilerek dışarı taşar.",
+    "xHeightEqualsMark": true,
+    "gapRatio": 0.3,
+    "stackedXHeightRatio": 0.42,
+    "stackedGapRatio": 0.26
+  },
+  "clearSpace": "İşaret kenarının 0.25'i kadar, dört yandan.",
+  "minSize": {
+    "markPx": 16,
+    "lockupWidthPx": 132
+  }
+}

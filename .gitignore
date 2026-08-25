@@ -22,3 +22,9 @@ desktop.ini
 # Kisisel ayarlar. Ilk calistirmada typer.example.json kopyalanarak
 # olusturulur; kimsenin kendi kisayolu baskasinin deposuna dusmez.
 /typer.json
+
+# Marka kitinin ara ciktilari: is dosyalari, kilavuzun ara HTML'i ve
+# deneme sayfalari. Assetlerin kendisi (visuals/) depoya girer.
+visuals/_generator/_scratch/
+visuals/_generator/_guide.html
+visuals/_generator/_jobs*.json

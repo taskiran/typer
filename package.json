@@ -11,7 +11,9 @@
     "setup:gpu": "cd engine && uv sync --extra gpu",
     "doctor": "cd engine && uv run python -m typer_engine doctor",
     "engine": "cd engine && uv run python -m typer_engine",
-    "icon": "node tools/make-icon.mjs"
+    "icon": "node tools/make-icon.mjs",
+    "brand": "node visuals/_generator/build.js",
+    "brand:guide": "electron visuals/_generator/guide.js"
   },
   "devDependencies": {
     "electron": "^33.2.0"

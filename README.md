@@ -169,6 +169,17 @@ Mac'te ayrıca:
 
 ---
 
+## Künye
+
+Typer'ın logotype'ındaki harfler **Modern Sans Serif 7** fontundan
+alınmıştır ([Style-7](http://www.styleseven.com/)); ücretsiz yazılımda
+kullanımı serbesttir ve kredi ister. Harfler bir kez vektöre çevrildiği
+için font dosyası bu depoda taşınmaz.
+
+Marka kitinin tamamı [`visuals/`](visuals/) altındadır.
+
+---
+
 ## Nasıl çalışıyor
 
 İki parça, aralarında tek yönlü bir boru:
