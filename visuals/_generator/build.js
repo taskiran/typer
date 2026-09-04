@@ -307,15 +307,28 @@ put("product/typer-tray.svg", markBare(C.white, 3.0));
 for (const s of [16, 20, 24, 32, 48, 64]) raster("product/typer-tray.svg", `product/typer-tray-${s}.png`, s);
 put("product/typer-mark-on-dark.svg", markBare(C.acid, 2.2));
 
-// Kapsülün solundaki işaret, doğrudan arayüzün klasörüne yazılır.
-// `ui/icon.png`'i tools/make-icon.mjs nasıl yazıyorsa aynı mantık:
-// arayüz logoyu ELLE çizmez, kaynaktan alır. Böylece harf burada
-// değişince kapsüldeki de değişir.
+// ÜRÜNÜN İÇİNE YAZILANLAR. Arayüz hiçbir markayı elle çizmez, hepsini
+// buradan alır — harf burada değişince kapsüldeki de, tepsideki de
+// değişir. Ayrı çizilselerdi biri gün gelir güncellenir, öteki unutulur.
 {
   const hedef = path.resolve(ROOT, "..", "ui", "mark.svg");
   fs.writeFileSync(hedef, markTile(C.acid, C.ink).trim() + "\n", "utf8");
   console.log("  ui/mark.svg  (kapsülün solundaki işaret)");
 }
+
+// TEPSİ SİMGESİ — iki işletim sistemi, iki dosya, çünkü kuralları farklı.
+//
+//   Windows  renkli pikselleri olduğu gibi çizer. Fayanslı işaret HEM
+//            koyu HEM açık görev çubuğunda okunur: koyuda fayans zemine
+//            karışır ve asit t havada durur, açıkta fayansın kendisi
+//            görünür. Tek renk beyaz bir harf açık temada kaybolur —
+//            eski simgenin sorunu buydu, iki zeminde de ölçüldü.
+//   macOS    ŞABLON görüntü ister: rengi tamamen yok sayar, yalnızca
+//            ALFA kanalına bakıp menü çubuğunun temasından boyar. Oraya
+//            fayans göndermek kocaman dolu bir kare demek olurdu, o
+//            yüzden çıplak harf gider.
+raster("mark/typer-mark-acid.svg", "../ui/icon.png", 32);
+raster("product/typer-tray.svg", "../ui/icon-template.png", 36);
 
 // ---- brand-tokens.json
 // Elle yazılmaz: art.js'ten türer, yani dosya asla geometriyle çelişemez.

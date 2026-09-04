@@ -439,14 +439,23 @@ ipcMain.on('typer:dismiss', (_e, copy) => {
 let tray = null;
 
 function trayIcon() {
-  const p = path.join(UI_DIR, 'icon.png');
-  if (!fs.existsSync(p)) return nativeImage.createEmpty();
-  let img = nativeImage.createFromPath(p);
+  // İKİ DOSYA, çünkü iki işletim sisteminin kuralı farklı. İkisi de
+  // marka kitinden üretilir (npm run brand), elle çizilmez.
+  //
+  //   icon.png           fayanslı işaret — Windows tepsisi renkleri
+  //                      olduğu gibi çizer, ve fayans hem koyu hem açık
+  //                      görev çubuğunda okunur.
+  //   icon-template.png  çıplak harf, opak — macOS menü çubuğu ŞABLON
+  //                      görüntü ister: rengi yok sayar, yalnızca alfa
+  //                      kanalına bakıp temasından boyar. Oraya fayans
+  //                      göndermek dolu bir kare demek olurdu.
+  const p = path.join(UI_DIR, IS_MAC ? 'icon-template.png' : 'icon.png');
+  const yedek = path.join(UI_DIR, 'icon.png');
+  const yol = fs.existsSync(p) ? p : yedek;
+  if (!fs.existsSync(yol)) return nativeImage.createEmpty();
+  let img = nativeImage.createFromPath(yol);
   if (img.isEmpty()) return nativeImage.createEmpty();
   if (IS_MAC) {
-    // macOS menü çubuğu ŞABLON görüntü ister: yalnızca alfa kanalına
-    // bakar ve rengi menü çubuğunun temasından alır. Renkli bir simge
-    // orada yamalı durur ve koyu temada kaybolur.
     img = img.resize({ width: 18, height: 18 });
     img.setTemplateImage(true);
   }
