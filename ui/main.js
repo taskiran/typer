@@ -442,9 +442,10 @@ function trayIcon() {
   // İKİ DOSYA, çünkü iki işletim sisteminin kuralı farklı. İkisi de
   // marka kitinden üretilir (npm run brand), elle çizilmez.
   //
-  //   icon.png           fayanslı işaret — Windows tepsisi renkleri
-  //                      olduğu gibi çizer, ve fayans hem koyu hem açık
-  //                      görev çubuğunda okunur.
+  //   icon.png           asit fayans üstüne siyah harf — Windows
+  //                      tepsisi renkleri olduğu gibi çizer, ve simge
+  //                      kendi zeminini taşıdığı için görev çubuğunun
+  //                      teması ne olursa olsun aynı güçle okunur.
   //   icon-template.png  çıplak harf, opak — macOS menü çubuğu ŞABLON
   //                      görüntü ister: rengi yok sayar, yalnızca alfa
   //                      kanalına bakıp temasından boyar. Oraya fayans

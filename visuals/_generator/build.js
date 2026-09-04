@@ -318,16 +318,17 @@ put("product/typer-mark-on-dark.svg", markBare(C.acid, 2.2));
 
 // TEPSİ SİMGESİ — iki işletim sistemi, iki dosya, çünkü kuralları farklı.
 //
-//   Windows  renkli pikselleri olduğu gibi çizer. Fayanslı işaret HEM
-//            koyu HEM açık görev çubuğunda okunur: koyuda fayans zemine
-//            karışır ve asit t havada durur, açıkta fayansın kendisi
-//            görünür. Tek renk beyaz bir harf açık temada kaybolur —
-//            eski simgenin sorunu buydu, iki zeminde de ölçüldü.
+//   Windows  renkli pikselleri olduğu gibi çizer. Asit fayans üstüne
+//            siyah harf: görev çubuğunun teması ne olursa olsun aynı
+//            güçle okunur, çünkü simge kendi zeminini yanında taşıyor
+//            ve asit her iki temayla da çarpışacak kadar parlak. Tek
+//            renk beyaz bir harf açık temada kayboluyordu — eski
+//            simgenin sorunu buydu, iki zeminde de ölçüldü.
 //   macOS    ŞABLON görüntü ister: rengi tamamen yok sayar, yalnızca
 //            ALFA kanalına bakıp menü çubuğunun temasından boyar. Oraya
 //            fayans göndermek kocaman dolu bir kare demek olurdu, o
 //            yüzden çıplak harf gider.
-raster("mark/typer-mark-acid.svg", "../ui/icon.png", 32);
+raster("mark/typer-mark-invert.svg", "../ui/icon.png", 32);
 raster("product/typer-tray.svg", "../ui/icon-template.png", 36);
 
 // ---- brand-tokens.json
