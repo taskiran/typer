@@ -231,8 +231,15 @@ function advanceCandidate() {
 function childEnv() {
   const env = Object.assign({}, process.env);
   const extra = path.join(app.getPath('home'), '.local', 'bin');
-  if (!(env.PATH || '').split(path.delimiter).includes(extra)) {
-    env.PATH = extra + path.delimiter + (env.PATH || '');
+  // process.env okumada büyük/küçük harf duyarsızdır, ama düz bir nesneye
+  // kopyalanınca değildir. Windows anahtarı "Path" tutar ve oturum açılışında
+  // gelen ortam da öyledir: orada `env.PATH` undefined'dır, ve buraya PATH
+  // diye yazılan şey gerçek PATH'in yerine değil, YANINA bir ikinci değişken
+  // olarak düşer — içinde yalnızca `extra` ile. Motoru arayan spawn o ikinciyi
+  // görür ve `uv` PATH'te olmasına rağmen ENOENT'e düşer. Anahtarı bul, uydurma.
+  const pathKey = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') || 'PATH';
+  if (!(env[pathKey] || '').split(path.delimiter).includes(extra)) {
+    env[pathKey] = extra + path.delimiter + (env[pathKey] || '');
   }
   // Python'un stdout'u boruya bağlıyken blok tamponlamasını kapat, yoksa
   // ölçer verisi 4 KB'lık paketler hâlinde ve saniyeler geç gelir.
