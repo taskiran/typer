@@ -11,6 +11,7 @@ dosyası, kısayolu bir yerde değiştirip diğerinde unutmanın garantili
 yoludur.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -71,6 +72,32 @@ DEFAULTS = {
     "device": "auto",
     # "auto" cihaza göre seçer: CUDA'da float16, CPU'da int8.
     "compute": "auto",
+
+    # ÇÖZÜM ARAMASININ GENİŞLİĞİ (ışın araması). Whisper her kelimeyi
+    # seçerken birden çok adayı paralel yürütür; beş aday bir adaydan
+    # daha iyi cümle kurar, ama beklediğin süreyi de uzatır.
+    #
+    # "auto": CUDA'da 5, CPU'da 1 — çünkü ikisinde aynı şeye mal olmaz.
+    # GPU'da bir cümle zaten 0.7 saniyede biter ve genişlik bedavaya
+    # yakındır; CPU'da ise beklenen sürenin doğrudan kendisidir.
+    #
+    # Ölçüldü (Ryzen, 8 çekirdek, small/int8, 40 sn ses):
+    #     ışın 5 -> 3.12 sn      ışın 1 -> 2.43 sn
+    # ve iki çeviri BİREBİR aynı metni verdi. Gürültülü ya da aksanlı
+    # seste 5'in kazandığı yerler vardır; orası önemliyse buraya 5 yaz.
+    "beam_size": "auto",
+
+    # CPU'DA KAÇ İŞ PARÇACIĞI. "auto" gerçek çekirdek sayısını kullanır —
+    # hiper iş parçacıklarını değil, Apple Silicon'da ise yalnızca
+    # performans çekirdeklerini.
+    #
+    # Kütüphanenin kendi varsayılanı ölçülenin gerisinde kaldı; aynı
+    # makinede 3.42 -> 3.12 sn (ışın 5) ve 2.89 -> 2.43 sn (ışın 1).
+    # Çekirdek sayısının ÜSTÜNE çıkmak ise geri götürüyor: 16 iş
+    # parçacığı 8'den yavaş.
+    #
+    # 0 = kütüphane ne diyorsa o. Bir sayı = tam olarak o kadar.
+    "cpu_threads": "auto",
 
     # İki blip: mikrofon açılınca yukarı giden bir tane, kapanınca kısa
     # bir tane. Çevirirken hiçbir ses yok — o an kelimeler zaten imlece
@@ -170,3 +197,86 @@ def resolve_backend(cfg: dict) -> tuple[str, str, str]:
         model = "large-v3" if device == "cuda" else "small"
 
     return model, device, compute
+
+
+def _cores() -> int:
+    """Kaç GERÇEK çekirdek var — hiper iş parçacıkları sayılmaz.
+
+    Apple Silicon'da yalnızca PERFORMANS çekirdekleri sayılır. M serisi
+    yongalarda verim çekirdekleri birkaç kat yavaştır ve CTranslate2 işi
+    iş parçacıklarına eşit böler: verim çekirdeğine düşen parça bitene
+    kadar ötekiler bekler. Yani onu işe katmak toplamı hızlandırmaz,
+    yavaşlatır.
+    """
+    if sys.platform == "darwin":
+        import subprocess
+        # perflevel0 = performans çekirdekleri (Apple Silicon). Intel
+        # Mac'lerde bu anahtar yoktur; orada fiziksel çekirdek doğru
+        # cevaptır.
+        for anahtar in ("hw.perflevel0.physicalcpu", "hw.physicalcpu"):
+            try:
+                cikti = subprocess.run(["sysctl", "-n", anahtar],
+                                       capture_output=True, text=True,
+                                       timeout=2).stdout.strip()
+                if cikti and int(cikti) > 0:
+                    return int(cikti)
+            except Exception:
+                pass
+    elif sys.platform == "win32":
+        try:
+            import psutil
+            n = psutil.cpu_count(logical=False)
+            if n:
+                return int(n)
+        except Exception:
+            pass
+    else:
+        try:
+            # /proc/cpuinfo: (fiziksel yonga, çekirdek) çiftlerinin tekili
+            ciftler, yonga, cekirdek = set(), None, None
+            with open("/proc/cpuinfo", encoding="utf-8") as f:
+                for satir in f:
+                    if satir.startswith("physical id"):
+                        yonga = satir.split(":")[1].strip()
+                    elif satir.startswith("core id"):
+                        cekirdek = satir.split(":")[1].strip()
+                    elif not satir.strip() and yonga is not None:
+                        ciftler.add((yonga, cekirdek))
+                        yonga = cekirdek = None
+            if yonga is not None:
+                ciftler.add((yonga, cekirdek))
+            if ciftler:
+                return len(ciftler)
+        except Exception:
+            pass
+    # Bilinmiyorsa hiper iş parçacığı varsay ve yarısını al. Yanılmanın
+    # bedeli birkaç yüz milisaniyedir, ve bu yön yanlış tarafa sapmaz.
+    return max(1, (os.cpu_count() or 4) // 2)
+
+
+def resolve_speed(cfg: dict, device: str) -> tuple[int, int]:
+    """(beam_size, cpu_threads) — "auto" olanları cihaza göre açar.
+
+    resolve_backend'in içine katılmadı: onun üç elemanlı sözleşmesini
+    doctor da çağırıyor ve imzayı genişletmek iki çağıranı birden
+    kırardı.
+    """
+    beam = cfg.get("beam_size", "auto")
+    if beam == "auto":
+        beam = 5 if device == "cuda" else 1
+    try:
+        beam = max(1, int(beam))
+    except (TypeError, ValueError):
+        beam = 5 if device == "cuda" else 1
+
+    threads = cfg.get("cpu_threads", "auto")
+    if threads == "auto":
+        # GPU'da iş parçacığı sayısının hükmü yok; 0 "kütüphane bilsin"
+        # demektir ve orada doğru cevap odur.
+        threads = _cores() if device == "cpu" else 0
+    try:
+        threads = max(0, int(threads))
+    except (TypeError, ValueError):
+        threads = 0
+
+    return beam, threads

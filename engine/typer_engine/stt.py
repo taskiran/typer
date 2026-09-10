@@ -21,7 +21,7 @@ import numpy as np
 import sounddevice as sd
 
 from typer_engine.bus import log
-from typer_engine.config import CFG, resolve_backend
+from typer_engine.config import CFG, resolve_backend, resolve_speed
 
 RATE = 16000
 FRAME_MS = 30
@@ -162,7 +162,8 @@ _model_lock = threading.Lock()
 _use_lock = threading.Lock()
 
 # warm() tarafından çözülür; teşhis satırları buradan okur.
-BACKEND = {"model": None, "device": None, "compute": None}
+BACKEND = {"model": None, "device": None, "compute": None,
+           "beam": None, "threads": None}
 
 
 def _wire_cuda_dlls():
@@ -209,9 +210,11 @@ def warm():
         if _model is not None:
             return _model
         model, device, compute = resolve_backend(CFG)
+        beam, threads = resolve_speed(CFG, device)
         if device != "cpu":
             _wire_cuda_dlls()
-        BACKEND.update(model=model, device=device, compute=compute)
+        BACKEND.update(model=model, device=device, compute=compute,
+                       beam=beam, threads=threads)
         from faster_whisper import WhisperModel
         log(f"[stt] {model} yükleniyor ({device}/{compute})...")
         if device == "cpu" and model.startswith(("large", "medium")):
@@ -219,7 +222,8 @@ def warm():
                 f"üzerinde çevirir. typer.json içinde \"model\": \"small\" "
                 f"dikte için çok daha kullanışlıdır.")
         try:
-            _model = WhisperModel(model, device=device, compute_type=compute)
+            _model = WhisperModel(model, device=device,
+                                  compute_type=compute, cpu_threads=threads)
         except Exception as e:
             if device == "cpu":
                 raise
@@ -228,9 +232,17 @@ def warm():
             # kullanılabilir bir dikte, hiç dikte olmamasından iyidir.
             log(f"[stt] {device} açılamadı ({str(e)[:120]}) — CPU'ya "
                 f"düşülüyor")
-            BACKEND.update(device="cpu", compute="int8")
-            _model = WhisperModel(model, device="cpu", compute_type="int8")
-        log("[stt] model hazır")
+            # Cihaz değişti, hız ayarları da onunla değişir: CPU'ya
+            # düşen bir koşu GPU'nun ışın genişliğiyle koşarsa yavaşlığın
+            # üstüne bir de gereksiz genişlik biner.
+            beam, threads = resolve_speed(CFG, "cpu")
+            BACKEND.update(device="cpu", compute="int8",
+                           beam=beam, threads=threads)
+            _model = WhisperModel(model, device="cpu", compute_type="int8",
+                                  cpu_threads=threads)
+        log(f"[stt] model hazır — ışın {beam}"
+            + (f", {threads} iş parçacığı"
+               if BACKEND["device"] == "cpu" and threads else ""))
     return _model
 
 
@@ -281,6 +293,9 @@ def transcribe(pcm: np.ndarray) -> str:
     with _use_lock:
         segments, _ = model.transcribe(
             audio, language=lang,
+            # Işın genişliği cihazdan gelir: CPU'da 1, CUDA'da 5.
+            # Gerekçesi ve ölçümü config.py'de, "beam_size" başlığında.
+            beam_size=BACKEND["beam"] or 5,
             # SICAKLIK MERDİVENİ, tek bir 0.0 DEĞİL.
             #
             # Whisper'ın tekrar döngüsüne karşı kendi savunması budur:

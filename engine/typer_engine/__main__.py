@@ -64,7 +64,8 @@ def _key_test(spec: str, label: str) -> tuple[bool, str]:
 
 def doctor(load_model: bool, interactive: bool) -> int:
     from typer_engine import __version__
-    from typer_engine.config import CFG, CONFIG_PATH, resolve_backend
+    from typer_engine.config import (CFG, CONFIG_PATH, resolve_backend,
+                                     resolve_speed)
     from typer_engine.hotkey import can_control, describe
 
     problems = 0
@@ -133,6 +134,9 @@ def doctor(load_model: bool, interactive: bool) -> int:
     # --- konuşma modeli ---------------------------------------------------
     model, device, compute = resolve_backend(CFG)
     _ok("konuşma modeli", f"{model} ({device}/{compute})")
+    beam, threads = resolve_speed(CFG, device)
+    _ok("çözüm araması", f"ışın {beam}"
+        + (f" / {threads} iş parçacığı" if device == "cpu" else ""))
     if device == "cpu" and model.startswith(("large", "medium")):
         _ok("model/cihaz uyumu",
             f"{model} CPU'da dikte için fazla yavaş — \"model\": \"small\"",
