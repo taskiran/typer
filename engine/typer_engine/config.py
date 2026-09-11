@@ -133,6 +133,21 @@ DEFAULTS = {
     # Yapıştırmadan sonra panoyu eski içeriğine geri koy.
     "restore_clipboard": True,
 
+    # TOPLANTI TRANSKRİPTİ. Zoom'un yerel kayıtları izlensin ve her yeni
+    # toplantıdan sonra yanına konuşmacı adlı bir transkript.md bırakılsın.
+    #
+    # Çalışması için Zoom tarafında iki şey gerekir: kayıt YEREL olmalı
+    # (buluta değil), ve ayarlarda "Record a separate audio file of each
+    # participant" açık olmalı — konuşmacı adları oradan geliyor, tahmin
+    # eden bir model yok.
+    #
+    # Zoom kayıt klasörü yoksa bu ayarın hiçbir etkisi olmaz. Geçmişe de
+    # dokunulmaz: yalnızca son 24 saatte yazılmış kayıtlar alınır.
+    "watch_meetings": True,
+    # Kayıtlar başka bir yerdeyse. Boş bırakılırsa Zoom'un bilinen
+    # klasörlerine bakılır (~/Documents/Zoom ve OneDrive karşılığı).
+    "meetings_dir": "",
+
     # KOPYALAMA KARTI NE ZAMAN ÇIKSIN.
     #
     # Odak kontrolünün üç cevabı var: "editable" (yazı kabul eden bir

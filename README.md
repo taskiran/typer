@@ -101,6 +101,39 @@ kendi duraklattığın müzik asla kendiliğinden çalmaz.
 
 ---
 
+## Toplantı transkripti
+
+Typer, Zoom'un **yerel** kayıtlarını izler ve her toplantıdan sonra kayıt
+klasörüne konuşmacı adlarıyla bir `transkript.md` bırakır:
+
+```markdown
+**00:00:13 · Çağatay**
+
+Masaüstünde iyi çalışıyor ama telefonda ilk açılış neredeyse dört saniye.
+```
+
+Konuşmacıyı tahmin eden bir model yok ve gerekmiyor: Zoom, kaydı
+katılımcı başına ayrı dosyalara yazabiliyor ve adı dosya adına koyuyor.
+Yani her dosya tanımı gereği tek kişi. Bunun için Zoom'da bir kerelik iki
+şey:
+
+1. **Ayarlar → Kayıt → "Record a separate audio file of each
+   participant"** açık olsun.
+2. Toplantıda **Kaydet** (yerel kayıt — buluta değil).
+
+Gerisi kendiliğinden olur; Typer toplantı bittikten sonra Zoom dosyaları
+yazmayı bitirdiğinde işe başlar. Elle de çalıştırabilirsin:
+
+```bash
+npm run meeting              # son kaydı çevir
+npm run meeting -- --hepsi   # çevrilmemiş bütün kayıtları
+```
+
+Ses yine hiçbir yere gitmez: dikte ile aynı yerel model, aynı süreç.
+Kapatmak için `typer.json` içinde `"watch_meetings": false`.
+
+---
+
 ## Ayarlar — `typer.json`
 
 Kökte. İlk çalıştırmada `typer.example.json`'dan kopyalanarak oluşturulur

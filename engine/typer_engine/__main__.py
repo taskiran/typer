@@ -6,6 +6,9 @@
     python -m typer_engine doctor           bu makinede neyin çalıştığını söyle
     python -m typer_engine doctor --load    modeli de yükleyip süresini ölç
     python -m typer_engine doctor --auto    kimseye soru sorma (otomasyon)
+    python -m typer_engine meeting          son Zoom kaydını transkripte çevir
+    python -m typer_engine meeting <klasör> belirli bir kaydı çevir
+    python -m typer_engine meeting --hepsi  çevrilmemiş bütün kayıtları çevir
 
 `doctor` bir takıma dağıtırken asıl işi görür: "çalışmıyor" cümlesini
 hangi parçanın eksik olduğuna çeviren tek şey odur.
@@ -187,6 +190,52 @@ def doctor(load_model: bool, interactive: bool) -> int:
     return 1 if problems else 0
 
 
+def meeting(argv: list[str]) -> int:
+    """Zoom'un yerel kaydından konuşmacı adlı transkript çıkar."""
+    from pathlib import Path
+    from typer_engine import meeting as toplanti
+
+    bayraklar = {a for a in argv if a.startswith("--")}
+    yollar = [a for a in argv if not a.startswith("--")]
+    dil = None
+    for a in argv:
+        if a.startswith("--dil="):
+            dil = a.split("=", 1)[1] or None
+
+    kok = Path(yollar[0]).expanduser() if yollar else None
+    if kok is not None and not kok.exists():
+        print(f"\n  {kok} diye bir klasör yok.\n")
+        return 1
+
+    bulunan = toplanti.kayitlar(kok)
+    if not bulunan:
+        print("\n  Zoom kaydı bulunamadı.\n"
+              "  Aranan yerler: ~/Documents/Zoom (ve OneDrive karşılığı).\n"
+              "  Zoom'da kayıt YEREL olmalı (buluta değil), ve ayarlarda\n"
+              "  \"Record a separate audio file of each participant\"\n"
+              "  açık olmalı — konuşmacı adları oradan geliyor.\n"
+              "  Klasörü elle de verebilirsin: meeting <klasör>\n")
+        return 1
+
+    secilen = bulunan if "--hepsi" in bayraklar else bulunan[:1]
+    yeniden = "--yeniden" in bayraklar
+    yazilan = 0
+    for kayit in secilen:
+        try:
+            hedef = toplanti.yaz(kayit, dil=dil, yeniden=yeniden)
+        except Exception as e:
+            print(f"  !! {kayit.name}: {e}")
+            continue
+        if hedef:
+            yazilan += 1
+            print(f"  ok  {hedef}")
+    if not yazilan:
+        print("\n  Yeni transkript yazılmadı.\n")
+        return 1
+    print()
+    return 0
+
+
 def main() -> int:
     argv = sys.argv[1:]
     if argv and argv[0] in ("-v", "--version"):
@@ -195,6 +244,8 @@ def main() -> int:
         return 0
     if argv and argv[0] == "doctor":
         return doctor("--load" in argv, "--auto" not in argv)
+    if argv and argv[0] == "meeting":
+        return meeting(argv[1:])
     from typer_engine.app import main as run
     run()
     return 0

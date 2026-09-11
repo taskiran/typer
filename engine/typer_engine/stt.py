@@ -336,6 +336,47 @@ def transcribe(pcm: np.ndarray) -> str:
     return text
 
 
+def transcribe_file(path, language=None, vad: bool = True
+                    ) -> tuple[list[tuple[float, float, str]], str | None]:
+    """Bir ses DOSYASINI zaman damgalı parçalar hâlinde çevir.
+
+    transcribe() tek bir söz öbeği bekler ve tek bir metin döndürür.
+    Burada ise bir toplantı kaydı var ve kimin NE ZAMAN konuştuğu
+    çıktının yarısıdır, o yüzden parçalar damgalarıyla birlikte döner.
+
+    Dosyayı PyAV çözer (faster-whisper'ın kendi ses yolu), yani m4a ve mp4
+    için ayrıca ffmpeg kurmak gerekmez.
+
+    vad=True sessizliği modele hiç göstermez. Katılımcı başına kayıtlarda
+    bu iki şey birden yapar: dosyanın büyük kısmı o kişinin sustuğu andır
+    ve atlanması çeviriyi kat kat hızlandırır, üstelik Whisper'ın
+    sessizliğe uydurduğu hayalet cümleler baştan kesilir.
+
+    Parçalarla birlikte KULLANILAN DİL de döner: language=None verildiğinde
+    tespit edilen dil budur, ve çağıran onu bir sonraki dosyaya sabitler —
+    aynı toplantının iki katılımcısı iki ayrı dile tespit edilmesin diye.
+    """
+    model = warm()
+    parcalar = []
+    with _use_lock:
+        segments, bilgi = model.transcribe(
+            str(path), language=language,
+            beam_size=BACKEND["beam"] or 5,
+            temperature=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            condition_on_previous_text=False,
+            vad_filter=vad,
+        )
+        for s in segments:
+            metin = _NONSPEECH.sub("", s.text).strip()
+            if not metin:
+                continue
+            metin = _collapse_loops(metin)
+            if not metin or _is_phantom(metin):
+                continue
+            parcalar.append((float(s.start), float(s.end), metin))
+    return parcalar, (language or getattr(bilgi, "language", None))
+
+
 def record(is_held, max_s: float = 180.0, min_s: float = 0.25,
            on_frame=None, on_stop=None) -> str | None:
     """is_held() True olduğu sürece kaydet, sonra çevir.

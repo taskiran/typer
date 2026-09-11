@@ -10,6 +10,7 @@
     "setup": "cd engine && uv sync",
     "setup:gpu": "cd engine && uv sync --extra gpu",
     "doctor": "cd engine && uv run python -m typer_engine doctor",
+    "meeting": "cd engine && uv run python -m typer_engine meeting",
     "engine": "cd engine && uv run python -m typer_engine",
     "brand": "node visuals/_generator/build.js",
     "brand:guide": "electron visuals/_generator/guide.js"

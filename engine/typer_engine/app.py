@@ -26,6 +26,9 @@ class Typer:
         warn_if_blocked()
         self.hotkey = Hotkey(key, toggle=toggle)
         self.silencer = Silencer()
+        # Toplantı çevirisi buna bakıp dosya sınırlarında bekler: model tek
+        # işçiyle çalışıyor ve dikte, arka plandaki işi beklememeli.
+        self._kayitta = False
 
         emit("idle")
         # Kısayolun BU işletim sistemindeki okunuşunu arayüze bildir, ki
@@ -42,6 +45,22 @@ class Typer:
         # ilk çeviri model gelene kadar bekler.
         threading.Thread(target=self._warm, daemon=True).start()
         threading.Thread(target=self._watch_input, daemon=True).start()
+        if CFG.get("watch_meetings", True):
+            threading.Thread(target=self._watch_meetings,
+                             daemon=True).start()
+
+    def _watch_meetings(self):
+        """Yeni Zoom kayıtlarını transkripte çeviren arka plan işi.
+
+        Motorun içinde, çünkü model zaten burada yüklü: ayrı bir süreç
+        aynı modeli bir kez daha belleğe alırdı ve large-v3 GPU'da
+        gigabaytlarla ölçülür.
+        """
+        try:
+            from typer_engine import meeting
+            meeting.izle(mesgul_mu=lambda: self._kayitta)
+        except Exception as e:
+            log(f"[toplantı] izleyici başlatılamadı: {e!r}")
 
     def _warm(self):
         try:
@@ -118,6 +137,7 @@ class Typer:
 
     def _capture(self):
         blips.start()                    # mikrofon açılmadan ÖNCE biter
+        self._kayitta = True
         emit("listening", 0.0)
         meter.reset()                    # ölçer her kayıtta yeniden ayarlanır
         started = time.time()
@@ -130,6 +150,7 @@ class Typer:
             text = record(self.hotkey.is_held, max_s=self._max_s,
                           on_frame=self._on_frame, on_stop=self._on_stop)
         finally:
+            self._kayitta = False
             self.silencer.end()
             # EMNİYET SINIRI TUZAĞI: toggle kipinde kayıt max_seconds'a
             # çarparak biterse tuş hâlâ "basılı" sayılır, ve bir sonraki
