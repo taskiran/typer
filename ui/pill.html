@@ -163,19 +163,23 @@
      asit olabilir. Açık zemin gerekseydi moss kullanılırdı. */
   #prog {
     display: none; flex: 1; align-items: center; gap: 10px;
-    margin-left: 8px; min-width: 0;
+    /* Isaret ciftiyle yazi arasi, cift ICINDEKI bosluktan uc kat genis:
+       iki fayans bir nesne gibi okunsun, yazi ayri bir sey olsun. */
+    margin-left: 12px; min-width: 0;
   }
   body.meeting #prog { display: flex; }
 
-  /* Zoom isareti bizim isaretimizle AYNI BOYUTTA ve hemen yaninda:
-     kaydin nereden geldigini tek bakista soyluyor. Aradaki bosluk
-     oteki ogelerden dar (6 degil 10), cunku iki fayans bir cift olarak
-     okunmali — ayri ayri iki simge gibi degil. */
+  /* Zoom isareti ONDE ve bizim isaretimizle AYNI BOYUTTA: kaydin
+     NEREDEN geldigi once okunuyor, onu kimin cevirdigi hemen arkasindan.
+     Aralari dar (4 piksel) cunku iki fayans tek bir nesne gibi okunmali;
+     yaziyla aralari ise uc kat genis (12), cunku o ayri bir sey. */
   #zoom {
-    width: 24px; height: 24px; display: block; flex: none;
-    margin-right: -4px;          /* gap 10 -> etkin 6 */
+    width: 24px; height: 24px; flex: none;
+    display: none;               /* yalnizca toplanti halinde */
+    margin-right: 4px;           /* iki fayans arasi: dar, cunku ciftler */
     -webkit-user-drag: none;
   }
+  body.meeting #zoom { display: block; }
   body.meeting #meterwrap, body.meeting #spin { display: none; }
 
   #progetiket {
@@ -222,10 +226,10 @@
     <button id="act" type="button">Kopyala</button>
   </div>
   <div id="pill">
+    <img id="zoom" src="zoom.svg" alt="Zoom" draggable="false">
     <img id="mark" src="mark.svg" alt="" draggable="false">
     <div id="meterwrap"><canvas id="meter" width="108" height="26"></canvas></div>
     <div id="prog">
-      <img id="zoom" src="zoom.svg" alt="Zoom" draggable="false">
       <div id="progetiket">Toplantı</div>
       <div id="progcubuk"><i id="progdolgu"></i></div>
       <div id="progyuzde">%0</div>
