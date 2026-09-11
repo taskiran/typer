@@ -165,8 +165,14 @@ def _izinli(bulunan: str | None) -> str | None:
     return liste[0]
 
 
-def cevir(kayit: Path, dil: str | None = None, bekle=None) -> dict:
+def cevir(kayit: Path, dil: str | None = None, bekle=None,
+          ilerleme=None) -> dict:
     """Kaydı çevir ve {konuşmacılar, sozler, sure...} döndür.
+
+    ilerleme(oran) 0..1 arası ilerlemeyi bildirir. Oran bütün dosyaların
+    TOPLAM süresine göre hesaplanır, dosya sayısına göre değil: iki
+    kişilik bir toplantıda biri beş dakika diğeri kırk dakika
+    konuşabiliyor ve "1/2 dosya bitti" bunu %50 diye gösterirdi.
 
     bekle() her dosyadan ÖNCE çağrılır ve dikte sürerken orada bloklar.
     Model tek işçiyle çalışıyor: bir toplantı dosyası çevrilirken tuşa
@@ -195,11 +201,18 @@ def cevir(kayit: Path, dil: str | None = None, bekle=None) -> dict:
     # o kişinin ne kadar konuştuğunun ucuz ve iyi bir ölçüsü.
     sira = sorted(dosyalar, key=lambda x: x[1].stat().st_size, reverse=True)
 
+    toplam = sum(sureler.values()) or 1.0
+    bitmis = 0.0
+
     sozler = []
     sayim = {}
     for ad, p in sira:
         if bekle is not None:
             bekle()
+        adim = None
+        if ilerleme is not None:
+            def adim(son, _b=bitmis):
+                ilerleme(min(1.0, (_b + son) / toplam))
         # KATILIMCI BAŞINA DOSYALAR TOPLANTI BOYUNCA SÜRER ve konuşmadığın
         # her an sessizliktir. VAD süzgeci burada iki şey birden yapar:
         # sessizliği modele hiç göstermeyerek çeviriyi kat kat hızlandırır,
@@ -207,8 +220,12 @@ def cevir(kayit: Path, dil: str | None = None, bekle=None) -> dict:
         # keser. (Diktede aynı süzgeç bir şey vermiyordu — orada kesintisiz
         # konuşma var, atılacak sessizlik yok.)
         t0 = time.perf_counter()
-        parcalar, kullanilan = transcribe_file(p, language=dil, vad=True)
+        parcalar, kullanilan = transcribe_file(p, language=dil, vad=True,
+                                               ilerleme=adim)
         gecen = time.perf_counter() - t0
+        bitmis += sureler.get(ad, 0.0)
+        if ilerleme is not None:
+            ilerleme(min(1.0, bitmis / toplam))
         if dil is None:
             dil = _izinli(kullanilan)
             log(f"[toplantı] dil: {dil} ({ad} dosyasından tespit edildi, "
@@ -274,14 +291,14 @@ def markdown(sonuc: dict) -> str:
 
 
 def yaz(kayit: Path, dil: str | None = None, yeniden: bool = False,
-        bekle=None) -> Path | None:
+        bekle=None, ilerleme=None) -> Path | None:
     """Kaydı çevir ve yanına transkript.md bırak. Yol döner."""
     hedef = kayit / "transkript.md"
     if hedef.exists() and not yeniden:
         log(f"[toplantı] {hedef} zaten var — atlandı (--yeniden ile üzerine "
             f"yazılır)")
         return None
-    sonuc = cevir(kayit, dil=dil, bekle=bekle)
+    sonuc = cevir(kayit, dil=dil, bekle=bekle, ilerleme=ilerleme)
     hedef.write_text(markdown(sonuc), encoding="utf-8")
     log(f"[toplantı] yazıldı: {hedef}")
     return hedef
@@ -308,7 +325,8 @@ def _hazir(kayit: Path) -> bool:
     return (time.time() - en_son) > _DURULMA
 
 
-def izle(mesgul_mu=None, aralik: float = 60.0, en_fazla_saat: float = 24.0):
+def izle(mesgul_mu=None, aralik: float = 60.0, en_fazla_saat: float = 24.0,
+         ilerleme=None, bitti=None):
     """Yeni Zoom kayıtlarını bekle ve gelen her birini transkripte çevir.
 
     GEÇMİŞE DOKUNULMAZ. Yalnızca son `en_fazla_saat` içinde yazılmış
@@ -333,7 +351,10 @@ def izle(mesgul_mu=None, aralik: float = 60.0, en_fazla_saat: float = 24.0):
                     continue                # Zoom hâlâ yazıyor
                 gorulen.add(kayit)
                 log(f"[toplantı] yeni kayıt: {kayit.name}")
-                yaz(kayit, bekle=_bekleyici(mesgul_mu))
+                hedef = yaz(kayit, bekle=_bekleyici(mesgul_mu),
+                            ilerleme=ilerleme)
+                if hedef is not None and bitti is not None:
+                    bitti(hedef)
         except Exception as e:
             log(f"[toplantı] izleyici hatası: {e!r}")
         time.sleep(aralik)

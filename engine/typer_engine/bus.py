@@ -49,6 +49,8 @@ def emit(state: str, level: float = 0.0, text: str = "", bands=None,
                  arayüz onu tepsiden geri verebilsin diye
       listening  mikrofon açık; level ve bands ölçer için
       thinking   mikrofon kapandı, çeviri sürüyor
+      meeting    arka planda toplantı çevriliyor; level 0..1 ilerleme
+      transcript bir transkript yazıldı; text dosyanın yoludur
       preview    metin kartta bekliyor; kesin, yazacak yerin gerçekten
                  bulunamadığını mı yoksa yalnızca bilinmediğini mi söyler
       error      bir şey ters gitti; text açıklamadır

@@ -151,7 +151,50 @@
   #spin svg { display: block; animation: donuyor 900ms linear infinite; }
   @keyframes donuyor { to { transform: rotate(360deg); } }
 
+  /* DÖRDÜNCÜ HÂL: "toplantı çevriliyor".
+     Ölçerin yerini alır — aynı satır, aynı yükseklik, aynı işaret. Kapsül
+     bu hâlde biraz genişler, çünkü üç şey taşır: ne olduğu, ne kadarı,
+     ve sayı. Yine de karttan çok küçük: bu bir bildirim değil, arka
+     planda bir şeyin sürdüğünün işareti — bildirimi Windows veriyor.
+
+     Marka: zemin ink (#0A0A0A/siyah), çubuk asit (#D2F53C), etiket sis
+     (#A9A9A1). Asit AÇIK zeminde metin olarak kullanılmaz (kontrast
+     1.13) ama burada zemin siyah, ve asit/ink 15.9 — yüzde rahatça
+     asit olabilir. Açık zemin gerekseydi moss kullanılırdı. */
+  #prog {
+    display: none; flex: 1; align-items: center; gap: 10px;
+    margin-left: 10px; min-width: 0;
+  }
+  body.meeting #prog { display: flex; }
+  body.meeting #meterwrap, body.meeting #spin { display: none; }
+
+  #progetiket {
+    flex: none; font-size: 12px; color: #A9A9A1; white-space: nowrap;
+  }
+  /* SABIT GENISLIK, flex degil. Kapsul icerigine gore daraliyor, yani
+     "kalan yeri doldur" diyen bir cubuk hicbir zaman genislemez ve
+     min-width'inde kalir — ilk denemede ilerleme bir cizgi gibi
+     goruluyordu. Sabit genislik ayni zamanda yuzdeyi okunur kiliyor:
+     %10 ile %90 arasindaki fark goz kararı ayirt edilebiliyor. */
+  #progcubuk {
+    flex: none; width: 120px; height: 5px; border-radius: 999px;
+    background: rgba(244, 244, 241, .18); overflow: hidden;
+  }
+  #progdolgu {
+    display: block; height: 100%; width: 0%;
+    border-radius: 999px; background: #D2F53C;
+    transition: width 280ms cubic-bezier(.22, 1, .36, 1);
+  }
+  #progyuzde {
+    flex: none; min-width: 36px; text-align: right; font-size: 12px;
+    /* Rakamlar eşit genişlikte: yoksa %9'dan %10'a geçerken çubuk
+       yerinden oynar ve göz onu titreme olarak görür. */
+    font-variant-numeric: tabular-nums;
+    color: #D2F53C;
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    #progdolgu { transition: none; }
     /* Dönme yerine nabız: aynı bilgiyi verir, hareket etmez. */
     #spin svg { animation: nabiz 1.6s ease-in-out infinite; }
     @keyframes nabiz { 0%, 100% { opacity: .35 } 50% { opacity: 1 } }
@@ -171,6 +214,11 @@
   <div id="pill">
     <img id="mark" src="mark.svg" alt="" draggable="false">
     <div id="meterwrap"><canvas id="meter" width="108" height="26"></canvas></div>
+    <div id="prog">
+      <div id="progetiket">toplantı</div>
+      <div id="progcubuk"><i id="progdolgu"></i></div>
+      <div id="progyuzde">%0</div>
+    </div>
     <div id="spin"><svg width="18" height="18" viewBox="0 0 18 18"
          xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <!-- Soluk yörünge, üstünde parlak bir yay. Yalnız yay olduğunda
@@ -191,6 +239,8 @@ const mctx = meter.getContext('2d');
 const labelEl = document.getElementById('label');
 const textEl = document.getElementById('text');
 const actBtn = document.getElementById('act');
+const dolguEl = document.getElementById('progdolgu');
+const yuzdeEl = document.getElementById('progyuzde');
 
 // Arka tampon aygıt çözünürlüğünde; çizim CSS pikselinde kalır.
 (function hidpi() {
@@ -270,6 +320,7 @@ window.typer.onState((s) => {
     const card = state === 'preview' || state === 'error';
     document.body.classList.toggle('card', card);
     document.body.classList.toggle('error', state === 'error');
+    document.body.classList.toggle('meeting', state === 'meeting');
     // "Çeviriyor" GECİKMEYLE açılır. Kısa bir diktede çeviri yarım
     // saniyeden kısa sürer, ve orada bir an parlayıp kaybolan bir
     // yükleniyor halkası hiç olmamasından kötüdür. Uzun promptta ise
@@ -294,6 +345,13 @@ window.typer.onState((s) => {
   }
   bands = (state === 'listening' && Array.isArray(s.bands) && s.bands.length)
     ? s.bands : new Array(BARS).fill(0);
+  // İlerleme HER mesajda güncellenir, yalnızca durum değişince değil:
+  // "meeting" durumu boyunca gelen şey zaten aynı durumun yeni yüzdesi.
+  if (state === 'meeting') {
+    const y = Math.max(0, Math.min(100, Math.round((s.level || 0) * 100)));
+    dolguEl.style.width = y + '%';
+    yuzdeEl.textContent = '%' + y;
+  }
   if ((state === 'preview' || state === 'error') && textEl.textContent !== s.text) {
     textEl.textContent = s.text || '';
   }

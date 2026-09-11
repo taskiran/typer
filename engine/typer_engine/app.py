@@ -58,7 +58,29 @@ class Typer:
         """
         try:
             from typer_engine import meeting
-            meeting.izle(mesgul_mu=lambda: self._kayitta)
+
+            son = [-1]
+
+            def ilerleme(oran):
+                # DİKTE SÜRERKEN SUS. Kapsül o an kullanıcınındır ve
+                # ölçerin yerine ilerleme çubuğu koymak, konuşurken
+                # arayüzün altından kaymasına yol açardı.
+                if self._kayitta:
+                    return
+                yuzde = int(oran * 100)
+                if yuzde == son[0]:
+                    return          # saniyede onlarca parça gelir, yüzde değişmez
+                son[0] = yuzde
+                emit("meeting", oran)
+
+            def bitti(hedef):
+                son[0] = -1
+                # Yol arayüze gider: bildirimi o gösterir ve tepsiye
+                # "son transkripti aç" maddesini o koyar.
+                emit("transcript", 0.0, str(hedef))
+
+            meeting.izle(mesgul_mu=lambda: self._kayitta,
+                         ilerleme=ilerleme, bitti=bitti)
         except Exception as e:
             log(f"[toplantı] izleyici başlatılamadı: {e!r}")
 

@@ -20,7 +20,7 @@
 'use strict';
 
 const { app, BrowserWindow, Tray, Menu, screen, nativeImage, shell,
-        ipcMain, clipboard } = require('electron');
+        ipcMain, clipboard, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -81,6 +81,11 @@ const ARGV = process.argv.slice(1);
 const flag = (n) => ARGV.includes('--' + n);
 const flagVal = (n) => { const i = ARGV.indexOf('--' + n); return i >= 0 ? ARGV[i + 1] : null; };
 const SHOT = flagVal('shot');
+// Hangi durumda yakalansin. Yoksa her yakalama "bosta"yi cekerdi ve
+// kapsulun oteki halleri (dinliyor, ceviriyor, toplanti, kart) hicbir
+// zaman belgelenemezdi.
+const SHOT_STATE = flagVal('durum');
+const SHOT_RATIO = parseFloat(flagVal('oran') || '0.62');
 const CAPTURE = !!SHOT;
 
 // Arayüzün konsolu yok — yanlış davrandığında nedenini söyleyebilecek
@@ -273,6 +278,10 @@ function killEngine() {
 
 const BOUNDS = {
   listening: { width: 260, height: 78 },
+  // İlerleme kapsülü dinleme kapsülünden geniş: ölçerin yerine bir etiket,
+  // bir çubuk ve yüzde giriyor. Yine de karttan çok küçük — bu bir bildirim
+  // değil, arka planda bir şeyin sürdüğünün işareti.
+  progress: { width: 300, height: 78 },
   card: { width: 440, height: 240 },
 };
 const HIDE_DELAY_MS = 340;      // kapsülün kapanma animasyonu kadar
@@ -282,6 +291,7 @@ let state = 'idle';
 let lastText = '';
 let lastTs = 0;
 let doneTs = 0;                 // kullanıcının işini bitirdiği kart
+let lastTranscript = '';        // en son yazılan toplantı transkriptinin yolu
 let hideTimer = null;
 
 function place(shape) {
@@ -353,6 +363,26 @@ function createWindow() {
   win.loadFile(path.join(UI_DIR, 'pill.html'));
 }
 
+function bildirTranskript(yol) {
+  // Windows'un kendi bildirimi: sağ altta çıkar ve bildirim merkezinde
+  // kalır, yani o an ekrana bakmıyorsan sonra görürsün. Kapsül bunu
+  // yapamaz — o, sen tuşa bastığın an içindir ve birkaç saniyede kapanır.
+  try {
+    if (!Notification.isSupported()) return;
+    const klasor = path.basename(path.dirname(yol));
+    const n = new Notification({
+      title: 'Transkript hazır',
+      body: klasor,
+      icon: path.join(UI_DIR, 'icon.png'),
+      silent: true,          // bitiş zaten sessizce olan bir şey
+    });
+    n.on('click', () => shell.openPath(yol));
+    n.show();
+  } catch (e) {
+    log('bildirim gösterilemedi: ' + e.message);
+  }
+}
+
 function onState(s) {
   const next = s.state || 'idle';
 
@@ -361,6 +391,20 @@ function onState(s) {
   if (next === 'ready') {
     hotkeyLabel = s.text || hotkeyLabel;
     refreshTray();
+    return;
+  }
+
+  // "transcript" de pencereye ait değil: bir dosya yazıldı, haberini
+  // bildirim ile tepsi verir. BURADA DÖNMEK ŞART, çünkü aşağıdaki satır
+  // s.text'i "son metin" sayıyor — bir dosya YOLU son diktenin yerine
+  // geçseydi, tepsiden kopyalanan şey artık konuştuğun cümle değil bir
+  // yol olurdu.
+  if (next === 'transcript') {
+    lastTranscript = s.text || '';
+    log('transkript hazır: ' + lastTranscript);
+    bildirTranskript(lastTranscript);
+    if (state === 'meeting') setState('idle');   // içeride refreshTray var
+    else refreshTray();
     return;
   }
 
@@ -382,7 +426,8 @@ function setState(next, payload) {
     } else {
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
       const card = next === 'preview' || next === 'error';
-      win.setBounds(place(card ? 'card' : 'listening'));
+      win.setBounds(place(card ? 'card'
+        : next === 'meeting' ? 'progress' : 'listening'));
       win.setIgnoreMouseEvents(!card, { forward: true });
       if (!win.isVisible()) win.showInactive();   // asla odak almaz
       // "EN ÜSTTE"Yİ HER GÖSTERİMDE YENİDEN UYGULA.
@@ -473,6 +518,7 @@ function trayIcon() {
 const LABELS = {
   idle: 'boşta', listening: 'dinliyor', thinking: 'çeviriyor',
   preview: 'metin bekliyor', error: 'hata',
+  meeting: 'toplantı çevriliyor',
 };
 
 function refreshTray(note) {
@@ -499,6 +545,14 @@ function buildMenu() {
       label: 'Son metni kopyala',
       enabled: !!lastText,
       click: () => { clipboard.writeText(lastText); log('son metin tepsiden kopyalandı'); },
+    },
+    {
+      // Bildirimi kaçıranın ikinci yolu. Dosya silinmiş olabilir —
+      // varlığı her menü açılışında sorulur, olmayan bir dosyayı açmayı
+      // öneren bir madde, hiç olmayan bir maddeden kötüdür.
+      label: 'Son transkripti aç',
+      enabled: !!lastTranscript && fs.existsSync(lastTranscript),
+      click: () => shell.openPath(lastTranscript),
     },
     { label: 'Ayarları aç (typer.json)', click: () => shell.openPath(CONFIG_PATH) },
     { label: 'Günlükleri aç', click: () => shell.openPath(LOG_DIR) },
@@ -633,6 +687,14 @@ if (!app.requestSingleInstanceLock()) {
     if (SHOT) {
       setTimeout(async () => {
         try {
+          if (SHOT_STATE) {
+            setState(SHOT_STATE, {
+              state: SHOT_STATE, level: SHOT_RATIO,
+              bands: new Array(24).fill(0).map((_, i) =>
+                0.25 + 0.55 * Math.abs(Math.sin(i * 0.7))),
+              text: 'Bir tusa bas, konus, yazi imlecinin oldugu yere dussun.',
+            });
+          }
           win.showInactive();
           await new Promise((r) => setTimeout(r, 1200));
           fs.writeFileSync(SHOT, (await win.capturePage()).toPNG());

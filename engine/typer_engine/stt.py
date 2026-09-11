@@ -336,7 +336,7 @@ def transcribe(pcm: np.ndarray) -> str:
     return text
 
 
-def transcribe_file(path, language=None, vad: bool = True
+def transcribe_file(path, language=None, vad: bool = True, ilerleme=None
                     ) -> tuple[list[tuple[float, float, str]], str | None]:
     """Bir ses DOSYASINI zaman damgalı parçalar hâlinde çevir.
 
@@ -367,6 +367,14 @@ def transcribe_file(path, language=None, vad: bool = True
             vad_filter=vad,
         )
         for s in segments:
+            # İLERLEME BURADAN OKUNUR, sayaçtan değil. Üreteç ilerledikçe
+            # her parçanın bitiş damgası geliyor ve o damga, sesin ne
+            # kadarının çevrildiğinin ta kendisi. Tahmin etmeye gerek yok.
+            if ilerleme is not None:
+                try:
+                    ilerleme(float(s.end))
+                except Exception:
+                    pass
             metin = _NONSPEECH.sub("", s.text).strip()
             if not metin:
                 continue
