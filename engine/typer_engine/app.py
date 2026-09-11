@@ -162,9 +162,25 @@ class Typer:
         kind = focus.kind()
         log(f"[typer] odak: {kind}")
 
-        if kind == focus.NOWHERE:
-            # Gerçekten yazacak yer yok. Kelimeleri kartta tut.
-            emit("preview", 0.0, text)
+        # KART NE ZAMAN ÇIKAR — bkz. config.py, "card_when".
+        #
+        # Burası eskiden yalnızca NOWHERE'e bakıyordu, ve o cevap sahada
+        # 710 diktede BİR kez döndü: alan dışında olduğun hemen her an
+        # odak "assume" ya da "editable" diyor. Yani kart pratikte hiç
+        # çıkmıyordu, ve yazının hiçbir yere düşmediği durumlar sessizce
+        # kayboluyordu.
+        ne_zaman = CFG.get("card_when", "unsure")
+        if ne_zaman == "always":
+            goster = True
+        elif ne_zaman == "nowhere":
+            goster = kind == focus.NOWHERE
+        else:
+            goster = kind in (focus.NOWHERE, focus.ASSUME)
+
+        if goster:
+            # Kelimeleri kartta tut. kesin=False iken kart "yazı düşmemiş
+            # OLABİLİR" der: emin olmadığımız yerde emin konuşmayalım.
+            emit("preview", 0.0, text, kesin=(kind == focus.NOWHERE))
         else:
             # Boştayken de metni taşı: yapıştırmanın hiçbir yere düşmediği
             # ortaya çıkarsa tepsi menüsü onu geri verebilsin.

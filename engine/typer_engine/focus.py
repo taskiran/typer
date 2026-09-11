@@ -71,30 +71,77 @@ def _windows_kind() -> str:
     try:
         auto.SetGlobalSearchTimeout(0.4)
         el = auto.GetFocusedControl()
-        if el is None:
-            return NOWHERE
-        try:
-            top = el.GetTopLevelControl()
-            if top is not None and (top.ClassName or "") in _SHELL_CLASSES:
-                return NOWHERE
-        except Exception:
-            pass
-        if el.ControlType in (auto.ControlType.EditControl,
-                              auto.ControlType.DocumentControl,
-                              auto.ControlType.ComboBoxControl):
-            return EDITABLE
-        for pid in (auto.PatternId.ValuePattern, auto.PatternId.TextPattern):
-            try:
-                if el.GetPattern(pid) is not None:
-                    return EDITABLE
-            except Exception:
-                pass
-        if (el.ClassName or "") in _SHELL_CLASSES:
-            return NOWHERE
-        return ASSUME
+        karar, neden = _windows_karar(auto, el)
     except Exception as e:
         log(f"[focus] kontrol başarısız ({str(e)[:60]})")
         return ASSUME
+    # TEŞHİS SATIRI, ve varlık sebebi şu: "kart neden çıkmadı?" sorusunun
+    # cevabı hiçbir yerde yazmıyordu. Log yalnızca "odak: editable" diyordu,
+    # NİYE editable dediğini değil — ve yanlış cevabın hangi kuraldan
+    # geldiğini görmeden hiçbir düzeltme ölçülemez. Diktede bir satır.
+    log(f"[focus] {karar} <- {neden}")
+    return karar
+
+
+def _windows_karar(auto, el) -> tuple[str, str]:
+    """(karar, gerekçe). Gerekçe insana, karar çağırana.
+
+    SALT OKUNUR BAYRAĞI TİPTEN ÖNCE GELİR.
+
+    Okuduğun bir web sayfası, bir PDF, bir sohbet dökümü — hepsi
+    DocumentControl'dür, ve tip listesi onları "yazılabilir" sayıyordu.
+    Kartın 710 diktede yalnızca BİR kez çıkmasının sebebi buydu: alan
+    dışında olduğun her an odak "editable" diyor, kart hiç düşünülmüyor,
+    metin de boşluğa yapıştırılıyordu.
+
+    Ölçüldü (Edge, metin kutusu olmayan düz bir sayfa):
+        tip=DocumentControl  Value=VAR(saltokunur=True)  Text=VAR
+    aynı tarayıcıdaki odaklı bir yazı kutusu ise saltokunur=False der.
+
+    AMA BU AYRIM HENÜZ SAHADA DOĞRULANMADI. Aynı ölçümde ön plandaki
+    WhatsApp penceresi de salt okunur bir DocumentControl gösterdi, ve
+    orada yapıştırma ÇALIŞIYOR: eğer WhatsApp'ın mesaj kutusu odaktayken
+    de aynı imzayı veriyorsa, bu kural başarılı yapıştırmanın üstüne kart
+    açar — geçen sefer tersine çevrilmesinin sebebi olan arızanın ta
+    kendisi. Yukarıdaki teşhis satırı tam olarak bunu ölçmek için var.
+    """
+    if el is None:
+        return NOWHERE, "odakta denetim yok"
+    try:
+        top = el.GetTopLevelControl()
+        if top is not None and (top.ClassName or "") in _SHELL_CLASSES:
+            return NOWHERE, f"kabuk penceresi ({top.ClassName})"
+    except Exception:
+        pass
+    try:
+        tip = el.ControlTypeName
+    except Exception:
+        tip = "?"
+    sinif = ""
+    try:
+        sinif = el.ClassName or ""
+    except Exception:
+        pass
+    try:
+        vp = el.GetPattern(auto.PatternId.ValuePattern)
+        if vp is not None and bool(vp.IsReadOnly):
+            return NOWHERE, f"{tip} kendini salt okunur ilan etti"
+    except Exception:
+        pass
+    if el.ControlType in (auto.ControlType.EditControl,
+                          auto.ControlType.DocumentControl,
+                          auto.ControlType.ComboBoxControl):
+        return EDITABLE, f"tip {tip}"
+    for ad, pid in (("Value", auto.PatternId.ValuePattern),
+                    ("Text", auto.PatternId.TextPattern)):
+        try:
+            if el.GetPattern(pid) is not None:
+                return EDITABLE, f"{ad} deseni ({tip})"
+        except Exception:
+            pass
+    if sinif in _SHELL_CLASSES:
+        return NOWHERE, f"kabuk sınıfı ({sinif})"
+    return ASSUME, f"{tip} / {sinif!r}, desen yok"
 
 
 def _mac_kind() -> str:

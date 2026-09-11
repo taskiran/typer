@@ -40,25 +40,33 @@ def _setup_streams():
 _setup_streams()
 
 
-def emit(state: str, level: float = 0.0, text: str = "", bands=None):
+def emit(state: str, level: float = 0.0, text: str = "", bands=None,
+         kesin=None):
     """Arayüze ne olduğunu söyle.
 
     Durumlar:
       idle       görünecek bir şey yok. text taşıyabilir: son çeviri,
                  arayüz onu tepsiden geri verebilsin diye
       listening  mikrofon açık; level ve bands ölçer için
-      preview    yazacak yer yoktu; metin kartta bekliyor
+      thinking   mikrofon kapandı, çeviri sürüyor
+      preview    metin kartta bekliyor; kesin, yazacak yerin gerçekten
+                 bulunamadığını mı yoksa yalnızca bilinmediğini mi söyler
       error      bir şey ters gitti; text açıklamadır
 
-    Çevirinin sürdüğü bir "thinking" durumu YOK, ve bu kasten böyle:
-    mikrofon kapandığı anda kapsül ekrandan kalkar. Çevirinin bitmesini
-    beklemek tuşu ölü hissettiriyordu.
+    "thinking" sonradan geldi ve kapsülü mikrofon kapanınca kapatmıyor:
+    uzun bir diktede çeviri saniyeler sürüyor, ve kapsülün o an yok olması
+    kelimelerin kaybolduğu izlenimini veriyordu. Kapsül metin
+    yapıştırıldığında kapanır.
     """
     payload = {
         "state": state,
         "level": round(float(level), 3),
         "bands": bands or [],
         "text": text,
+        # Yalnızca "preview" için anlamlı: True ise yazacak yer gerçekten
+        # yoktu, False ise bilinmiyordu. Kart etiketi buna göre değişir —
+        # bilmediğini bilmek, bilmediğini bildirmekten iyidir.
+        "kesin": kesin,
         "ts": time.time(),
     }
     line = PREFIX + json.dumps(payload, ensure_ascii=True)

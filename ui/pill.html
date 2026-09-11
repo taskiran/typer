@@ -282,8 +282,13 @@ window.typer.onState((s) => {
       document.body.classList.remove('thinking');
     }
     if (card) {
-      labelEl.textContent = state === 'error'
-        ? 'Sorun' : 'Yazılacak yer bulunamadı';
+      // Etiket kesinliğe göre: motor yazacak yer OLMADIĞINI biliyorsa
+      // öyle der, yalnızca bilmiyorsa onu der. İkisini aynı cümleyle
+      // söylemek, yazı WhatsApp'a düzgün düşmüşken "yer bulunamadı"
+      // yazmak demekti.
+      labelEl.textContent = state === 'error' ? 'Sorun'
+        : (s.kesin === false ? 'Yazı düşmemiş olabilir'
+                             : 'Yazılacak yer bulunamadı');
       actBtn.textContent = state === 'error' ? OK : COPY;
     }
   }

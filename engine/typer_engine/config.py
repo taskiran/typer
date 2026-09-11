@@ -132,6 +132,24 @@ DEFAULTS = {
 
     # Yapıştırmadan sonra panoyu eski içeriğine geri koy.
     "restore_clipboard": True,
+
+    # KOPYALAMA KARTI NE ZAMAN ÇIKSIN.
+    #
+    # Odak kontrolünün üç cevabı var: "editable" (yazı kabul eden bir
+    # alan), "nowhere" (masaüstü ya da salt okunur bir belge) ve "assume"
+    # — yani BİLMİYORUM. Sonuncusu, odakta hiçbir desen taşımayan bir
+    # Chromium paneli olduğunda dönüyor, ve orada yazı kutuya düşmüş de
+    # olabilir hiçbir yere gitmemiş de. Ölçüldü: diktelerin ~%5'i burada.
+    #
+    #   "unsure"   (varsayılan) nowhere + assume — bilinmediğinde de göster
+    #   "nowhere"  yalnızca kesin olduğunda
+    #   "always"   her diktede
+    #
+    # Varsayılan "unsure", çünkü iki hata aynı ağırlıkta değil: kartın
+    # çıkmaması kelimelerin sessizce kaybolması demek, fazladan çıkması
+    # ise bir tıkla kapanan bir kutu. Kart WhatsApp gibi yazının zaten
+    # düzgün düştüğü yerlerde rahatsız ederse "nowhere" eski davranıştır.
+    "card_when": "unsure",
 }
 
 # backtalk'tan taşınan adlar sessizce kabul edilir, ki eski bir ayar
