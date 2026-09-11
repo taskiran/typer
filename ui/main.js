@@ -281,7 +281,7 @@ const BOUNDS = {
   // İlerleme kapsülü dinleme kapsülünden geniş: ölçerin yerine bir etiket,
   // bir çubuk ve yüzde giriyor. Yine de karttan çok küçük — bu bir bildirim
   // değil, arka planda bir şeyin sürdüğünün işareti.
-  progress: { width: 300, height: 78 },
+  progress: { width: 332, height: 78 },
   card: { width: 440, height: 240 },
 };
 const HIDE_DELAY_MS = 340;      // kapsülün kapanma animasyonu kadar

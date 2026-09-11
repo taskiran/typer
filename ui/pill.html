@@ -163,9 +163,19 @@
      asit olabilir. Açık zemin gerekseydi moss kullanılırdı. */
   #prog {
     display: none; flex: 1; align-items: center; gap: 10px;
-    margin-left: 10px; min-width: 0;
+    margin-left: 8px; min-width: 0;
   }
   body.meeting #prog { display: flex; }
+
+  /* Zoom isareti bizim isaretimizle AYNI BOYUTTA ve hemen yaninda:
+     kaydin nereden geldigini tek bakista soyluyor. Aradaki bosluk
+     oteki ogelerden dar (6 degil 10), cunku iki fayans bir cift olarak
+     okunmali — ayri ayri iki simge gibi degil. */
+  #zoom {
+    width: 24px; height: 24px; display: block; flex: none;
+    margin-right: -4px;          /* gap 10 -> etkin 6 */
+    -webkit-user-drag: none;
+  }
   body.meeting #meterwrap, body.meeting #spin { display: none; }
 
   #progetiket {
@@ -215,7 +225,8 @@
     <img id="mark" src="mark.svg" alt="" draggable="false">
     <div id="meterwrap"><canvas id="meter" width="108" height="26"></canvas></div>
     <div id="prog">
-      <div id="progetiket">toplantı</div>
+      <img id="zoom" src="zoom.svg" alt="Zoom" draggable="false">
+      <div id="progetiket">Toplantı</div>
       <div id="progcubuk"><i id="progdolgu"></i></div>
       <div id="progyuzde">%0</div>
     </div>

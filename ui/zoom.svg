@@ -1,0 +1,20 @@
+<!--
+  Zoom işareti. ÜÇÜNCÜ TARAF MARKASI, bizim marka kitimizin parçası değil
+  ve visuals/_generator ondan bihaber — kaydın nereden geldiğini söylemek
+  için burada duruyor, bir ürün iddiası olarak değil.
+
+  Kutu geometrisi bizimkiyle aynı tutuldu (32'lik kare, köşe yarıçapı 9),
+  çünkü kapsülde asit fayansın hemen yanında duruyor ve iki işaret yan
+  yana bir çift gibi okunmalı. Renk Zoom'un kendi mavisi; markanın
+  siyah/asit paletine katılmaz, katılsaydı zaten Zoom'u göstermezdi.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"
+     width="32" height="32" role="img" aria-label="Zoom">
+  <rect width="32" height="32" rx="9" fill="#2D8CFF"/>
+  <!-- gövde -->
+  <rect x="5.8" y="11" width="13.4" height="10" rx="2.7" fill="#FFFFFF"/>
+  <!-- objektif: gövdeye değdiği yerde dar, dışa doğru açılan kama -->
+  <path fill="#FFFFFF" d="M19.9 14.5 L24.9 11.9
+    Q26.2 11.25 26.2 12.7 L26.2 19.3
+    Q26.2 20.75 24.9 20.1 L19.9 17.5 Z"/>
+</svg>
