@@ -221,6 +221,14 @@ class Typer:
             goster = kind in (focus.NOWHERE, focus.ASSUME)
 
         if goster:
+            # KART ÇIKIYORSA METİN PANODA KALIR. Geri koyma zamanlayıcısı
+            # tam kartın ömrüne denk geliyordu: düğmeye basan kullanıcı,
+            # kopyaladığı yazının 200 ms sonra eski pano içeriğiyle
+            # değiştirildiğini görüyordu (bkz. paste.keep).
+            #
+            # Yan faydası: kart açıkken Ctrl+V zaten çalışır, düğmeye
+            # basmaya bile gerek yok.
+            paste.keep(text)
             # Kelimeleri kartta tut. kesin=False iken kart "yazı düşmemiş
             # OLABİLİR" der: emin olmadığımız yerde emin konuşmayalım.
             emit("preview", 0.0, text, kesin=(kind == focus.NOWHERE))

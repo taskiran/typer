@@ -59,12 +59,80 @@ def clip_set(text) -> bool:
         return False
 
 
+# BEKLEYEN PANO GERİ KOYMASI — İPTAL EDİLEBİLİR OLMAK ZORUNDA.
+#
+# Geri koyma gecikmeli çalışır (yapıştırma panoyu okuyana kadar), ve o
+# 1.5 saniye kartın Kopyala düğmesiyle AYNI ana denk geliyor: kart
+# yapıştırmadan ~40 ms sonra çıkıyor, insan da ona bir saniye içinde
+# basıyor. Sahada ölçüldü — kart 17.037'de çıktı, tıklama 18.314'te
+# geldi, geri koyma 18.5'e kuruluydu: kullanıcının kopyaladığı yazı
+# panoda 200 ms yaşadı ve sessizce eski içerikle değiştirildi. Düğme
+# çalışıyordu, onu kendi zamanlayıcımız geri alıyordu.
+#
+# Bu yüzden kart çıktığında geri koyma iptal edilir ve metin panoda
+# kalır (keep). Zaten kartın anlamı budur: yazı bir yere düşmedi ya da
+# düştüğünden emin değiliz — o anda panoda duracak en doğru şey, eski
+# içerik değil, söylenen cümledir.
+_geri_lock = threading.Lock()
+_geri = None                 # bekleyen geri koyma: {"prev","iptal","oldu","t"}
+
+
+def _geri_kur(prev):
+    """prev'i _CLIP_RESTORE_S sonra panoya geri koyacak zamanlayıcıyı kur."""
+    global _geri
+    is_ = {"prev": prev, "iptal": False, "oldu": False}
+    t = threading.Timer(_CLIP_RESTORE_S, _geri_koy, args=(is_,))
+    t.daemon = True
+    is_["t"] = t
+    with _geri_lock:
+        _geri = is_
+    t.start()
+
+
+def _geri_unut():
+    """Geri konacak bir şey yok: bekleyen kayıt varsa unutulsun."""
+    global _geri
+    with _geri_lock:
+        _geri = None
+
+
+def _geri_koy(is_):
+    # Pano yazımı KİLİDİN İÇİNDE. keep() araya girecekse ya tamamen
+    # bizden önce ya da tamamen sonra girsin; ikisinin clip_set'i
+    # birbirine karışırsa panoda hangisinin kaldığı kura meselesi olur.
+    with _geri_lock:
+        if is_["iptal"]:
+            return
+        is_["oldu"] = True
+        clip_set(is_["prev"])
+
+
+def keep(text: str) -> None:
+    """Bekleyen geri koymayı iptal et — metin panoda kalsın.
+
+    Kart gösterildiğinde çağrılır. Zamanlayıcı bizden önce davrandıysa
+    (odak kontrolü bir uygulamada takıldıysa olabilir) metin panoya
+    yeniden yazılır: iptal edemediğimizi geri alırız.
+    """
+    global _geri
+    with _geri_lock:
+        is_, _geri = _geri, None
+        if is_ is None:
+            return
+        is_["iptal"] = True
+        oldu = is_["oldu"]
+    is_["t"].cancel()
+    if oldu:
+        clip_set(text)
+
+
 def send(text: str, hotkey=None) -> bool:
     """Metni panoya koy ve yapıştır. Panoyu sonra geri verir."""
     if not text:
         return False
     if not CFG.get("paste", True):
         # Yapıştırma kapalı: metin yalnızca panoda beklesin.
+        _geri_unut()
         return clip_set(text)
 
     # Tetiğin değiştiricileri hâlâ basılıyken gönderilen Ctrl+V karşı
@@ -90,7 +158,7 @@ def send(text: str, hotkey=None) -> bool:
         ok = False
 
     if prev is not None and prev != text:
-        t = threading.Timer(_CLIP_RESTORE_S, lambda: clip_set(prev))
-        t.daemon = True
-        t.start()
+        _geri_kur(prev)
+    else:
+        _geri_unut()
     return ok
