@@ -1,4 +1,7 @@
 <!doctype html>
+<!-- lang="tr": CSS büyük harfe çevirirken Türkçe kuralını uygulasın.
+     Yoksa etiketler "TRANSKRIPT", "DÜŞMEMIŞ" diye çıkıyor (İ yerine I). -->
+<html lang="tr">
 <meta charset="utf-8">
 <title>Typer</title>
 <!--
@@ -76,6 +79,19 @@
     color: #8b8b8b; margin-bottom: 7px;
   }
   body.error #label { color: #d98b7a; }
+  /* Transkript hazır: bir BAŞARI, ve markanın başarı rengi asit. Siyah
+     zeminde asit/ink kontrastı 15.9 — küçük büyük harfte bile okunur. */
+  body.done #label { color: #D2F53C; }
+
+  /* Transkript kartının ikinci satırı: "57 dk · Ad, Ad". Sis rengi, yani
+     başlıktan bir kademe geride; kapsüldeki "Toplantı" etiketiyle aynı. */
+  #meta {
+    display: none;
+    margin-top: 3px;
+    font-size: 12px; line-height: 1.45; color: #A9A9A1;
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
+  body.done #meta { display: block; }
 
   #text {
     font-size: 13.5px; line-height: 1.5; color: #ededed;
@@ -223,6 +239,7 @@
   <div id="card">
     <div id="label">Yazılacak yer bulunamadı</div>
     <div id="text"></div>
+    <div id="meta"></div>
     <button id="act" type="button">Kopyala</button>
   </div>
   <div id="pill">
@@ -254,6 +271,7 @@ const mctx = meter.getContext('2d');
 const labelEl = document.getElementById('label');
 const textEl = document.getElementById('text');
 const actBtn = document.getElementById('act');
+const metaEl = document.getElementById('meta');
 const dolguEl = document.getElementById('progdolgu');
 const yuzdeEl = document.getElementById('progyuzde');
 
@@ -322,7 +340,9 @@ function frame() {
 }
 requestAnimationFrame(frame);
 
-const COPY = 'Kopyala', OK = 'Tamam';
+const COPY = 'Kopyala', OK = 'Tamam', FOLDER = 'Klasörü gör';
+// Düğmeye basınca ne olacağı; kart her açıldığında durumdan belirlenir.
+let eylem = 'copy';
 
 // Çeviri bundan kısa sürerse yükleniyor halkası hiç görünmez.
 const THINK_DELAY = 260;
@@ -332,9 +352,10 @@ window.typer.onState((s) => {
   const next = s.state || 'idle';
   if (next !== state) {
     state = next;
-    const card = state === 'preview' || state === 'error';
+    const card = state === 'preview' || state === 'error' || state === 'done';
     document.body.classList.toggle('card', card);
     document.body.classList.toggle('error', state === 'error');
+    document.body.classList.toggle('done', state === 'done');
     document.body.classList.toggle('meeting', state === 'meeting');
     // "Çeviriyor" GECİKMEYLE açılır. Kısa bir diktede çeviri yarım
     // saniyeden kısa sürer, ve orada bir an parlayıp kaybolan bir
@@ -353,9 +374,11 @@ window.typer.onState((s) => {
       // söylemek, yazı WhatsApp'a düzgün düşmüşken "yer bulunamadı"
       // yazmak demekti.
       labelEl.textContent = state === 'error' ? 'Sorun'
+        : state === 'done' ? 'Transkript hazır'
         : (s.kesin === false ? 'Yazı düşmemiş olabilir'
                              : 'Yazılacak yer bulunamadı');
-      actBtn.textContent = state === 'error' ? OK : COPY;
+      eylem = state === 'error' ? 'ok' : state === 'done' ? 'folder' : 'copy';
+      actBtn.textContent = { ok: OK, folder: FOLDER, copy: COPY }[eylem];
     }
   }
   bands = (state === 'listening' && Array.isArray(s.bands) && s.bands.length)
@@ -367,9 +390,12 @@ window.typer.onState((s) => {
     dolguEl.style.width = y + '%';
     yuzdeEl.textContent = '%' + y;
   }
-  if ((state === 'preview' || state === 'error') && textEl.textContent !== s.text) {
+  if ((state === 'preview' || state === 'error' || state === 'done') &&
+      textEl.textContent !== s.text) {
     textEl.textContent = s.text || '';
   }
+  // Aynı kart açıkken ikinci bir transkript gelirse ikisi birden güncellenir.
+  if (state === 'done') metaEl.textContent = s.ozet || '';
   wrap.classList.toggle('in', state !== 'idle');
 });
 
@@ -377,8 +403,7 @@ actBtn.addEventListener('click', () => {
   // "Kopyalandı" şovu yok: pencere okunacak kadar bile durmadan gidiyor,
   // ve kopyalamanın kendisi zaten onayın ta kendisi. Tıklama anında
   // hissedilsin diye kayma şimdi başlıyor.
-  const copy = actBtn.textContent === COPY;
   wrap.classList.remove('in');
-  window.typer.dismiss(copy);
+  window.typer.dismiss(eylem);
 });
 </script>

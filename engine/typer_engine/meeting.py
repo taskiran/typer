@@ -15,6 +15,7 @@ kesin olarak biliyor, üstelik "SPEAKER_01" yerine gerçek adıyla.
 
 Ses hiçbir yere gönderilmez; dikte tarafıyla aynı yerel model, aynı süreç.
 """
+import json
 import re
 import sys
 import time
@@ -367,6 +368,13 @@ def markdown(sonuc: dict) -> str:
 def yaz(kayit: Path, dil: str | None = None, yeniden: bool = False,
         bekle=None, ilerleme=None) -> Path | None:
     """Kaydı çevir ve yanına transkript.md bırak. Yol döner."""
+    r = _yaz(kayit, dil=dil, yeniden=yeniden, bekle=bekle, ilerleme=ilerleme)
+    return r[0] if r else None
+
+
+def _yaz(kayit: Path, dil: str | None = None, yeniden: bool = False,
+         bekle=None, ilerleme=None) -> tuple[Path, dict] | None:
+    """yaz() ile aynı, ama çeviri sonucunu da döndürür (kartın özeti için)."""
     hedef = kayit / "transkript.md"
     if hedef.exists() and not yeniden:
         log(f"[toplantı] {hedef} zaten var — atlandı (--yeniden ile üzerine "
@@ -375,12 +383,46 @@ def yaz(kayit: Path, dil: str | None = None, yeniden: bool = False,
     sonuc = cevir(kayit, dil=dil, bekle=bekle, ilerleme=ilerleme)
     hedef.write_text(markdown(sonuc), encoding="utf-8")
     log(f"[toplantı] yazıldı: {hedef}")
-    return hedef
+    return hedef, sonuc
+
+
+def ozet(sonuc: dict) -> str:
+    """Kartta toplantı adının altındaki tek satır: "57 dk · Ad, Ad"."""
+    return f"{_sureli(sonuc['sure'])} · {', '.join(sonuc['konusmacilar'])}"
 
 
 # ------------------------------------------------------------------ izleyici
 
-_DURULMA = 120.0        # kayıt klasörü bu kadar süre kıpırdamadıysa bitmiştir
+# Klasör bu kadar süre kıpırdamadıysa Zoom'un işi bitmiştir. Üç ayrı
+# süre, çünkü Zoom'un kendi söylediğine ne kadar güvenebildiğimiz değişiyor:
+_DURULMA_KISA = 5.0     # Zoom "bitti" dedi: son yazımın oturması yeter
+_DURULMA = 120.0        # Zoom bir şey demiyor (recording.conf yok)
+_DURULMA_UZUN = 600.0   # Zoom "sürüyor" deyip sustu: yarıda kalmış olabilir
+
+
+def _zoom_durumu(kayit: Path) -> bool | None:
+    """Zoom'un dönüştürmesi bitti mi — Zoom'un KENDİ söylediğine göre.
+
+    Zoom kayıt klasörüne bir recording.conf bırakıyor ve dönüştürmenin
+    ilerlemesini orada tutuyor. Bu bilgisayardaki gerçek bir kayıtta:
+        {"items":[{"audio":"audio1758209065.m4a","process":100,...}],...}
+    100 bitti demek. Bu işaret olmadan tek ölçüt klasörün iki dakika
+    susmasıydı, yani her transkript toplantı bittikten 2-3 dakika sonra
+    başlıyordu ve kullanıcı o arada "neden başlamadı" diye soruyordu.
+
+    True: bitti. False: sürüyor. None: dosya yok ya da okunamadı — elle
+    konmuş bir kayıt, bu dosyayı yazmayan bir Zoom sürümü, ya da Zoom
+    tam o an yazıyor.
+    """
+    try:
+        veri = json.loads((kayit / "recording.conf").read_text(
+            encoding="utf-8", errors="replace"))
+        ogeler = veri.get("items") or []
+        if not ogeler:
+            return None
+        return all(float(o.get("process", 0)) >= 100 for o in ogeler)
+    except Exception:
+        return None
 
 
 def _hazir(kayit: Path) -> bool:
@@ -388,18 +430,28 @@ def _hazir(kayit: Path) -> bool:
 
     Toplantı biter bitmez dosyalar orada DEĞİLDİR: Zoom kaydı m4a/mp4'e
     dönüştürürken klasöre yazmayı sürdürür, ve yarısı yazılmış bir dosyayı
-    çevirmek yarım bir transkript demektir. Klasörün en son değişme anına
-    bakmak, dönüştürmenin bittiğini anlamanın dosya kilidi denemeden en
-    ucuz yolu.
+    çevirmek yarım bir transkript demektir.
+
+    Önce Zoom'a sorulur (recording.conf). "Bitti" diyorsa birkaç saniyelik
+    sessizlik ve dosyaların OKUNABİLİR olması yeter: yarım yazılmış bir
+    m4a'nın süre bilgisi yoktur, PyAV onu açamaz. Zoom bir şey demiyorsa
+    eski kural geçerli — klasörün iki dakika susması.
     """
     try:
         en_son = max(p.stat().st_mtime for p in kayit.rglob("*") if p.is_file())
     except ValueError:
         return False
-    return (time.time() - en_son) > _DURULMA
+    sessiz = time.time() - en_son
+    durum = _zoom_durumu(kayit)
+    if durum is None:
+        return sessiz > _DURULMA
+    if sessiz < (_DURULMA_KISA if durum else _DURULMA_UZUN):
+        return False
+    dosyalar = ses_dosyalari(kayit)
+    return bool(dosyalar) and all(_sure(p) > 0 for _, p in dosyalar)
 
 
-def izle(mesgul_mu=None, aralik: float = 60.0, en_fazla_saat: float = 24.0,
+def izle(mesgul_mu=None, aralik: float = 10.0, en_fazla_saat: float = 24.0,
          ilerleme=None, bitti=None):
     """Yeni Zoom kayıtlarını bekle ve gelen her birini transkripte çevir.
 
@@ -409,9 +461,19 @@ def izle(mesgul_mu=None, aralik: float = 60.0, en_fazla_saat: float = 24.0,
     kaza olurdu.
 
     Süresiz döner; çağıran bunu daemon bir iş parçacığında başlatır.
+
+    bitti(hedef, sonuc) her transkript yazıldığında çağrılır.
+
+    Bakış aralığı kısa (10 sn), çünkü bakmak ucuz: birkaç klasörün
+    listesi ve bir JSON dosyası. Pahalı olan çeviri, o da yalnızca bir
+    kez yapılır.
     """
     log(f"[toplantı] izleyici açık — {aralik:.0f} sn'de bir bakılıyor")
     gorulen = set()
+    # Görülüp de henüz hazır olmayanlar. Bir kez loglanır: "neden
+    # başlamadı" sorusunun cevabı log'da dursun, bir daha tahmin
+    # yürütülmesin.
+    bekleyen = set()
     while True:
         try:
             simdi = time.time()
@@ -422,13 +484,18 @@ def izle(mesgul_mu=None, aralik: float = 60.0, en_fazla_saat: float = 24.0,
                     gorulen.add(kayit)      # eski arşiv: bir daha bakma
                     continue
                 if not _hazir(kayit):
+                    if kayit not in bekleyen:
+                        bekleyen.add(kayit)
+                        log(f"[toplantı] kayıt görüldü, Zoom dönüştürmeyi "
+                            f"bitirince başlanacak: {kayit.name}")
                     continue                # Zoom hâlâ yazıyor
                 gorulen.add(kayit)
+                bekleyen.discard(kayit)
                 log(f"[toplantı] yeni kayıt: {kayit.name}")
-                hedef = yaz(kayit, bekle=_bekleyici(mesgul_mu),
-                            ilerleme=ilerleme)
-                if hedef is not None and bitti is not None:
-                    bitti(hedef)
+                r = _yaz(kayit, bekle=_bekleyici(mesgul_mu),
+                         ilerleme=ilerleme)
+                if r is not None and bitti is not None:
+                    bitti(*r)
         except Exception as e:
             log(f"[toplantı] izleyici hatası: {e!r}")
         time.sleep(aralik)

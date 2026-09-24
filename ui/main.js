@@ -292,6 +292,7 @@ let lastText = '';
 let lastTs = 0;
 let doneTs = 0;                 // kullanıcının işini bitirdiği kart
 let lastTranscript = '';        // en son yazılan toplantı transkriptinin yolu
+let bekleyenKart = null;        // dikte sürerken gelen transkript kartı
 let hideTimer = null;
 
 function place(shape) {
@@ -319,6 +320,13 @@ function createWindow() {
     maximizable: false,
     fullscreenable: false,
     focusable: false,           // yazdığın alandan odağı asla çalmaz
+    // MAC'TE KARTIN DÜĞMESİ BUNUNLA ÇALIŞIR. macOS etkin olmayan bir
+    // pencereye gelen ilk tıklamayı içeriğe iletmez, onu pencereyi
+    // etkinleştirmek için harcar. Bu pencere ise hiç etkinleşemiyor
+    // (focusable: false), yani bu ayar olmadan Kopyala ve Klasörü gör
+    // düğmelerine yapılan her tıklama boşa gider. Windows ve Linux'ta
+    // etkisi yok.
+    acceptFirstMouse: true,
     show: false,
     webPreferences: {
       preload: path.join(UI_DIR, 'preload.js'),
@@ -403,13 +411,52 @@ function onState(s) {
     lastTranscript = s.text || '';
     log('transkript hazır: ' + lastTranscript);
     bildirTranskript(lastTranscript);
-    if (state === 'meeting') setState('idle');   // içeride refreshTray var
-    else refreshTray();
+    transkriptKarti(lastTranscript, s.ozet || '');
     return;
   }
 
+  // Kart açıkken arka plandaki çevirinin ilerlemesi onu SİLMEZ. Kart
+  // kullanıcının alması gereken bir şey taşıyor (metin ya da transkript);
+  // yerine bir yüzde çubuğu koymak onu elinden almak olurdu.
+  if (next === 'meeting' && (state === 'preview' || state === 'error' ||
+                             state === 'done')) return;
+
   if (s.text) { lastText = s.text; lastTs = s.ts || 0; }
-  setState(next === 'preview' && s.ts && s.ts === doneTs ? 'idle' : next, s);
+  const hedef = next === 'preview' && s.ts && s.ts === doneTs ? 'idle' : next;
+  // Dikte bitti ve bekleyen bir transkript kartı var: şimdi sırası.
+  if (hedef === 'idle' && bekleyenKart) { bekleyenKartiGoster(); return; }
+  setState(hedef, s);
+}
+
+function toplantiAdi(yol) {
+  // Zoom klasör adının başındaki tarih ve saat kartta tekrar: kayıt zaten
+  // şimdi bitti. "2026-09-24 12.36.18 Çağatay Gülten Zoom Toplantısı"
+  // -> "Çağatay Gülten Zoom Toplantısı"
+  const ad = path.basename(path.dirname(yol));
+  return ad.replace(/^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}\s+/, '') || ad;
+}
+
+function transkriptKarti(yol, ozet) {
+  // Kopyalama kartının aynısı: aynı yer, aynı biçim, tek düğme.
+  //
+  // DİKTE SÜRERKEN GELİRSE BEKLER. O an kapsül kullanıcınındır; ölçerin
+  // yerine bir kart açmak konuşurken arayüzü altından çekmek olurdu,
+  // yazılacak metni taşıyan bir kopyalama kartını ezmek ise o metni
+  // kaybettirirdi. Kart, kapsül boşa çıkınca gösterilir.
+  const kart = { state: 'done', text: toplantiAdi(yol), ozet,
+                 ts: Date.now() / 1000 };
+  if (state === 'idle' || state === 'meeting' || state === 'done') {
+    setState('done', kart);
+  } else {
+    bekleyenKart = kart;
+    log('transkript kartı bekliyor (kapsül meşgul: ' + state + ')');
+  }
+}
+
+function bekleyenKartiGoster() {
+  const k = bekleyenKart;
+  bekleyenKart = null;
+  if (k) setState('done', k);
 }
 
 function setState(next, payload) {
@@ -425,7 +472,7 @@ function setState(next, payload) {
       }, HIDE_DELAY_MS);          // kapsül önce kapansın, sonra pencere gitsin
     } else {
       if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-      const card = next === 'preview' || next === 'error';
+      const card = next === 'preview' || next === 'error' || next === 'done';
       win.setBounds(place(card ? 'card'
         : next === 'meeting' ? 'progress' : 'listening'));
       win.setIgnoreMouseEvents(!card, { forward: true });
@@ -467,10 +514,14 @@ function setState(next, payload) {
   win.webContents.send('typer:state', payload || { state: next });
 }
 
-ipcMain.on('typer:dismiss', (_e, copy) => {
-  if (copy && lastText) clipboard.writeText(lastText);
-  doneTs = lastTs;              // bu kartın işi bitti
-  log(copy ? 'kart kopyalandı' : 'kart kapatıldı');
+ipcMain.on('typer:dismiss', (_e, ne) => {
+  if (ne === 'folder') {
+    klasoruGoster(lastTranscript);
+  } else {
+    if (ne === 'copy' && lastText) clipboard.writeText(lastText);
+    doneTs = lastTs;            // bu kartın işi bitti
+    log(ne === 'copy' ? 'kart kopyalandı' : 'kart kapatıldı');
+  }
   // Hemen gitsin: metin panoya düştükten sonra kartın başka işi yok ve
   // beklemesi tıklamayı karşılıksız hissettirir. Sayfa zaten kapanma
   // animasyonuna başladı, bu süre yalnızca onu bekliyor.
@@ -481,8 +532,29 @@ ipcMain.on('typer:dismiss', (_e, copy) => {
     }
     state = 'idle';
     refreshTray();
+    // Kopyalama kartı kapanırken bir transkript kartı sıra bekliyorduysa.
+    bekleyenKartiGoster();
   }, 280);
 });
+
+function klasoruGoster(yol) {
+  // Klasörü AÇ ve transkripti içinde SEÇİLİ göster: Windows'ta Gezgin,
+  // Mac'te Finder. Açılan klasörde dosyayı aramak zorunda kalınmasın.
+  // Dosya bu arada silindiyse klasörün kendisi açılır.
+  try {
+    if (yol && fs.existsSync(yol)) {
+      shell.showItemInFolder(yol);
+      log('klasör açıldı: ' + path.dirname(yol));
+    } else if (yol && fs.existsSync(path.dirname(yol))) {
+      shell.openPath(path.dirname(yol));
+      log('klasör açıldı (transkript yok): ' + path.dirname(yol));
+    } else {
+      log('klasör bulunamadı: ' + yol);
+    }
+  } catch (e) {
+    log('klasör açılamadı: ' + e.message);
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /* tepsi                                                               */
@@ -519,6 +591,7 @@ const LABELS = {
   idle: 'boşta', listening: 'dinliyor', thinking: 'çeviriyor',
   preview: 'metin bekliyor', error: 'hata',
   meeting: 'toplantı çevriliyor',
+  done: 'transkript hazır',
 };
 
 function refreshTray(note) {
@@ -692,7 +765,9 @@ if (!app.requestSingleInstanceLock()) {
               state: SHOT_STATE, level: SHOT_RATIO,
               bands: new Array(24).fill(0).map((_, i) =>
                 0.25 + 0.55 * Math.abs(Math.sin(i * 0.7))),
-              text: 'Bir tusa bas, konus, yazi imlecinin oldugu yere dussun.',
+              text: SHOT_STATE === 'done' ? 'Çağatay Gülten Zoom Toplantısı'
+                : 'Bir tusa bas, konus, yazi imlecinin oldugu yere dussun.',
+              ozet: '57 dk · Bertan Taskiran, Çağatay Gülten',
             });
           }
           win.showInactive();

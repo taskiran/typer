@@ -73,11 +73,13 @@ class Typer:
                 son[0] = yuzde
                 emit("meeting", oran)
 
-            def bitti(hedef):
+            def bitti(hedef, sonuc):
                 son[0] = -1
-                # Yol arayüze gider: bildirimi o gösterir ve tepsiye
-                # "son transkripti aç" maddesini o koyar.
-                emit("transcript", 0.0, str(hedef))
+                # Yol arayüze gider: kartı ve bildirimi o gösterir, tepsiye
+                # "son transkripti aç" maddesini o koyar. Özet kartın ikinci
+                # satırıdır ("57 dk · Ad, Ad").
+                emit("transcript", 0.0, str(hedef),
+                     ozet=meeting.ozet(sonuc))
 
             meeting.izle(mesgul_mu=lambda: self._kayitta,
                          ilerleme=ilerleme, bitti=bitti)

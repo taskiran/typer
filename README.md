@@ -121,8 +121,15 @@ Yani her dosya tanımı gereği tek kişi. Bunun için Zoom'da bir kerelik iki
    participant"** açık olsun.
 2. Toplantıda **Kaydet** (yerel kayıt — buluta değil).
 
-Gerisi kendiliğinden olur; Typer toplantı bittikten sonra Zoom dosyaları
-yazmayı bitirdiğinde işe başlar. Elle de çalıştırabilirsin:
+Gerisi kendiliğinden olur. Zoom kaydı dönüştürmeyi bitirdikten birkaç
+saniye sonra Typer çeviriye başlar ve kapsülde yüzdeyi gösterir. Bitince
+kopyalama kartına benzeyen bir kart çıkar; **Klasörü gör** transkripti
+klasöründe seçili olarak açar (Windows'ta Gezgin, Mac'te Finder).
+
+Kayıtlar Belgeler/Zoom altında aranır; Belgeler OneDrive'a taşınmışsa ya da
+başka bir dilde adlandırılmışsa da bulunur. Zoom'da başka bir klasör
+seçtiysen onu `typer.json` içinde `"meetings_dir"` ile ver. Elle de
+çalıştırabilirsin:
 
 ```bash
 npm run meeting              # son kaydı çevir

@@ -41,7 +41,7 @@ _setup_streams()
 
 
 def emit(state: str, level: float = 0.0, text: str = "", bands=None,
-         kesin=None):
+         kesin=None, ozet=None):
     """Arayüze ne olduğunu söyle.
 
     Durumlar:
@@ -50,7 +50,8 @@ def emit(state: str, level: float = 0.0, text: str = "", bands=None,
       listening  mikrofon açık; level ve bands ölçer için
       thinking   mikrofon kapandı, çeviri sürüyor
       meeting    arka planda toplantı çevriliyor; level 0..1 ilerleme
-      transcript bir transkript yazıldı; text dosyanın yoludur
+      transcript bir transkript yazıldı; text dosyanın yoludur, ozet
+                 kartta onun altına giden tek satır
       preview    metin kartta bekliyor; kesin, yazacak yerin gerçekten
                  bulunamadığını mı yoksa yalnızca bilinmediğini mi söyler
       error      bir şey ters gitti; text açıklamadır
@@ -71,6 +72,8 @@ def emit(state: str, level: float = 0.0, text: str = "", bands=None,
         "kesin": kesin,
         "ts": time.time(),
     }
+    if ozet is not None:
+        payload["ozet"] = ozet
     line = PREFIX + json.dumps(payload, ensure_ascii=True)
     with _lock:
         try:
