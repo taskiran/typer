@@ -16,6 +16,7 @@ kesin olarak biliyor, üstelik "SPEAKER_01" yerine gerçek adıyla.
 Ses hiçbir yere gönderilmez; dikte tarafıyla aynı yerel model, aynı süreç.
 """
 import re
+import sys
 import time
 from pathlib import Path
 
@@ -26,9 +27,24 @@ from typer_engine.stt import BACKEND, transcribe_file, warm
 # Zoom m4a yazar. Ötekiler elle beslenen kayıtlar için — dosyayı PyAV
 # çözüyor, yani kabul etmemek için bir sebep yok.
 _SES = {".m4a", ".mp4", ".wav", ".mp3", ".m4v", ".aac", ".flac", ".ogg"}
+# Görüntü taşıyan kapsayıcılar. Aynı klasörde bir ses dosyası varsa
+# bunlar atlanır — bkz. ses_dosyalari.
+_GORUNTU = {".mp4", ".m4v"}
 
 # audio_only_<katilimci id>_<Gorunen_Ad>
 _AD = re.compile(r"^audio_only_\d+_(.+)$", re.I)
+
+# Zoom'un KARIŞIK ses/görüntü dosyası: audio<toplantı kimliği>. Bu
+# bilgisayardaki gerçek bir kayıtta böyle çıktı (audio1990253058.m4a,
+# video1990253058.mp4); "audio_only" adını hiç taşımadı.
+_KARISIK = re.compile(r"^(audio|video)(_only)?_?\d*$", re.I)
+
+# Katılımcı başına dosyanın öteki adlandırması: audio<AdSoyad><sayılar>.
+# Zoom sürümüne göre değişiyor. Bu biçim bu bilgisayarda henüz görülmedi;
+# tanınıyor, çünkü tanımamanın bedeli transkriptte konuşmacı adı olarak
+# "audioBertanTaskiran21990253058" yazmasıdır.
+_AD2 = re.compile(r"^audio([^\d_].*?)\d+$", re.I)
+_BUYUK_HARF_ONU = re.compile(r"(?<=[a-zçğıöşü])(?=[A-ZÇĞİÖŞÜ])")
 
 # Aynı konuşmacının arka arkaya gelen parçaları tek paragrafta toplanır.
 # Bundan uzun bir sessizlikten sonrası yeni bir söz sayılır: aradan bir
@@ -43,8 +59,13 @@ def _katilimci(p: Path) -> str:
     m = _AD.match(kok)
     if m:
         return m.group(1).replace("_", " ").strip() or kok
-    if kok.lower() in ("audio_only", "audio"):
+    if _KARISIK.match(kok):
         return "Karışık ses"
+    m = _AD2.match(kok)
+    if m:
+        # Boşluksuz yazılmış ad: "ÇağatayGülten" -> "Çağatay Gülten"
+        ad = _BUYUK_HARF_ONU.sub(" ", m.group(1))
+        return ad.replace("_", " ").strip() or kok
     return kok.replace("_", " ").strip() or kok
 
 
@@ -74,12 +95,36 @@ def _sureli(sn: float) -> str:
 
 # --------------------------------------------------------------- kayıt bulma
 
+def _belgeler() -> Path | None:
+    """İşletim sisteminin GERÇEK Belgeler klasörü (yalnızca Windows).
+
+    Adı sabit yazmak sahada yanıldı: OneDrive, Belgeler'i hesabın diline
+    göre adlandırıyor ve bu bilgisayarda klasör `OneDrive/Dokumente`,
+    yani Almanca. Zoom kayıtları oraya yazdı; biz "Documents" ile
+    "Belgeler"e bakıyorduk ve izleyici hiçbir şey bulamadan sustu.
+    Windows'a sormak her dilde ve her taşınmış klasörde doğru cevabı
+    verir.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(1024)
+        # CSIDL_PERSONAL (5): Belgeler — OneDrive'a taşındıysa taşındığı yer
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0:
+            return Path(buf.value) if buf.value else None
+    except Exception:
+        pass
+    return None
+
+
 def _zoom_kokleri() -> list[Path]:
     """Zoom'un yerel kayıtları nereye koyabileceği yerler.
 
-    OneDrive "Belgeler"i kendine taşıdığında klasör ev dizininin altından
-    çıkar ve Zoom onu takip eder — ikisine de bakmak, kullanıcıya klasör
-    yolunu sordurmaktan ucuzdur.
+    Önce Windows'un söylediği Belgeler klasörü, sonra bilinen adlar. Zoom
+    varsayılan olarak Belgeler/Zoom'a yazar ve Belgeler taşınınca onu
+    takip eder. Zoom ayarlarından başka bir klasör seçildiyse onu
+    bilemeyiz — Zoom bu ayarı şifreli tutuyor; o durumda "meetings_dir".
     """
     elle = str(CFG.get("meetings_dir") or "").strip()
     if elle:
@@ -88,11 +133,15 @@ def _zoom_kokleri() -> list[Path]:
         k = Path(elle).expanduser()
         return [k] if k.is_dir() else []
     ev = Path.home()
-    adaylar = [ev / "Documents" / "Zoom",
-               ev / "OneDrive" / "Documents" / "Zoom",
-               ev / "Belgeler" / "Zoom",
-               ev / "OneDrive" / "Belgeler" / "Zoom"]
-    return [k for k in adaylar if k.is_dir()]
+    belgeler = _belgeler()
+    adaylar = ([belgeler / "Zoom"] if belgeler else []) + [
+        ev / "Documents" / "Zoom",
+        ev / "OneDrive" / "Documents" / "Zoom",
+        ev / "Belgeler" / "Zoom",
+        ev / "OneDrive" / "Belgeler" / "Zoom"]
+    # Aynı klasör iki yoldan gelebilir (Windows'un cevabı çoğu zaman
+    # listedekilerden biridir); iki kez taramak her kaydı iki kez bulurdu.
+    return list(dict.fromkeys(k for k in adaylar if k.is_dir()))
 
 
 def _kayit_mi(klasor: Path) -> bool:
@@ -121,11 +170,36 @@ def ses_dosyalari(kayit: Path) -> list[tuple[str, Path]]:
     duran `audio_only.m4a` herkesin karıştığı tek kanaldır ve onu da
     çevirmek, her cümlenin transkripte iki kez düşmesi demektir.
     """
-    ayri = kayit / "Audio Record"
-    kaynak = ayri if ayri.is_dir() else kayit
+    ayri = _ayri_klasor(kayit)
+    kaynak = ayri if ayri is not None else kayit
     dosyalar = sorted(p for p in kaynak.iterdir()
                       if p.is_file() and p.suffix.lower() in _SES)
+    # AYNI SES İKİ KEZ OLMASIN. Katılımcı başına dosya yoksa Zoom köke
+    # bir ses (audio<id>.m4a) ve bir görüntü (video<id>.mp4) bırakıyor ve
+    # ikisinde de aynı karışık ses var. Görüntüyü de çevirmek, her cümleyi
+    # transkripte iki ayrı "konuşmacı" adıyla yazdırırdı. Gerçek bir
+    # kayıtta görüldü. Ses dosyası varsa görüntüler atlanır.
+    if any(p.suffix.lower() not in _GORUNTU for p in dosyalar):
+        dosyalar = [p for p in dosyalar if p.suffix.lower() not in _GORUNTU]
     return [(_katilimci(p), p) for p in dosyalar]
+
+
+def _ayri_klasor(kayit: Path) -> Path | None:
+    """Katılımcı başına seslerin durduğu alt klasör; yoksa None.
+
+    Adı "Audio Record", ama Zoom klasör adlarını arayüz diline göre
+    çevirebiliyor (bu bilgisayarda toplantı klasörü "Zoom Toplantısı"
+    adını taşıyor). O yüzden ad tutmazsa İÇERİĞE bakılır: bir kayıt
+    klasöründe ses dosyası taşıyan tek alt klasör budur.
+    """
+    tam = kayit / "Audio Record"
+    if tam.is_dir():
+        return tam
+    for d in sorted(kayit.iterdir()):
+        if d.is_dir() and any(p.is_file() and p.suffix.lower() in _SES
+                              for p in d.iterdir()):
+            return d
+    return None
 
 
 # ------------------------------------------------------------------ çeviri
