@@ -85,6 +85,25 @@ def emit(state: str, level: float = 0.0, text: str = "", bands=None,
             pass
 
 
+def yavas(ne: str, t0: float, esik: float = 1.0) -> float:
+    """Bir adım eşiği aştıysa adıyla logla; yeni zaman noktasını döndür.
+
+    Sahada diktelerin %11'i sabit ~7.7 sn takılıyordu ve log'da bunun
+    NEREDE olduğunu söyleyen hiçbir şey yoktu — yalnızca kapsülün
+    "çeviriyor"da kaldığı süre ölçülebiliyordu. Takılma bir daha olursa
+    hangi adımda olduğu bu satırda yazar. Eşiğin altında hiçbir şey
+    yazılmaz: normal bir dikte log'a tek satır eklemez.
+
+        t = time.perf_counter()
+        adim_bir()
+        t = yavas("adım bir", t)
+    """
+    t = time.perf_counter()
+    if t - t0 > esik:
+        log(f"[yavaş] {ne}: {t - t0:.1f} sn")
+    return t
+
+
 def log(line: str):
     """İnsan için. stderr'e gider; arayüz onu logs/engine.log dosyasına
     yazar, terminalden çalıştırdığında doğrudan ekrandadır."""

@@ -16,11 +16,12 @@ import os
 import re
 import sys
 import threading
+import time
 
 import numpy as np
 import sounddevice as sd
 
-from typer_engine.bus import log
+from typer_engine.bus import log, yavas
 from typer_engine.config import CFG, resolve_backend, resolve_speed
 
 RATE = 16000
@@ -285,11 +286,13 @@ def transcribe(pcm: np.ndarray) -> str:
     """int16 mono 16kHz -> metin. Whisper'ın ürettiği parantezli konuşma
     dışı işaretler ([BLANK_AUDIO], [SIGHS], (öksürük)...) atılır; geriye
     bir şey kalmıyorsa o sessizlikti."""
+    t = time.perf_counter()
     model = warm()
     audio = pcm.astype(np.float32) / 32768.0
     # .en modeli tanımı gereği İngilizcedir; gerisi _choose_language'a sorar.
     lang = ("en" if str(BACKEND["model"]).endswith(".en")
             else _choose_language(model, audio))
+    t = yavas("dil tespiti", t)
     with _use_lock:
         segments, _ = model.transcribe(
             audio, language=lang,
@@ -327,6 +330,8 @@ def transcribe(pcm: np.ndarray) -> str:
         )
         segments = list(segments)   # kilidin içinde boşalt: bu bir üreteç
                                     # ve asıl iş gezinirken oluyor
+    # Uzun bir dikte doğal olarak uzun sürer: eşik sesin süresiyle büyür.
+    yavas("çeviri", t, esik=2.0 + len(audio) / 16000 * 0.2)
     text = "".join(s.text for s in segments).strip()
     text = _NONSPEECH.sub("", text).strip()
     text = _collapse_loops(text)

@@ -7,7 +7,7 @@ import threading
 import time
 
 from typer_engine import blips, focus, meter, paste, single
-from typer_engine.bus import emit, log
+from typer_engine.bus import emit, log, yavas
 from typer_engine.config import CFG
 from typer_engine.hotkey import Hotkey, describe, warn_if_blocked
 from typer_engine.silence import Silencer
@@ -144,7 +144,38 @@ class Typer:
         odur, ve sesi geciktirmek tuşu ölü hissettirir.
         """
         emit("thinking")
+        if self.silencer.yutar:
+            # KAPANIŞ İŞLERİ ÇEVİRİNİN YOLUNDA DEĞİL. 2026-09-29'da sesi
+            # geri açma buraya, çeviriden ÖNCEye alındı ve ardından
+            # diktelerin %11'i sabit ~7.7 sn takıldı (öncesinde %0.6).
+            # Kapsül o süre boyunca "çeviriyor"da kalıyordu. Ses, blip ve
+            # müzik artık çeviriyle AYNI ANDA, ayrı bir iplikte yürür;
+            # bunlardan biri takılsa bile metin zamanında gelir.
+            threading.Thread(target=self._kapanis, name="kapanis",
+                             daemon=True).start()
+        else:
+            blips.end()
+
+    def _kapanis(self):
+        """Mikrofon kapandı: sesi aç, blibi çal, müziği sürdür — bu sırayla.
+
+        Ses ÖNCE açılır: Windows'ta toplam ses kapalı ve o hâlde çalan
+        bir blip duyulmaz. Müzik EN SON sürer: Spotify yeniden çalarken
+        kendi ses akışını açıyor, ve bunun blibin akışıyla aynı ana
+        düşmesi takılmanın en olası adayıydı (eskiden müzik çeviri
+        bittikten sonra sürüyordu, blipten saniyeler sonra).
+
+        Blip bu iplikte ama Typer'ın kendi akışlarıyla hiçbir zaman
+        yarışmaz: bir sonraki kaydın açılış blibi aynı kilidi bekler,
+        ve mikrofon ancak ondan sonra açılır.
+        """
+        t = time.perf_counter()
+        self.silencer.sesi_ac()
+        t = yavas("sesi açma", t)
         blips.end()
+        t = yavas("kapanış blibi", t)
+        self.silencer.restore_now()
+        yavas("müziği sürdürme", t)
 
     # ---------------------------------------------------------------- döngü
 
@@ -170,7 +201,9 @@ class Typer:
             # istisna `finally: silencer.end()` satırını hiç çalıştırmaz
             # ve her şey susturulmuş, Spotify duraklamış kalır — bir
             # sonraki başarılı kayda kadar.
+            t = time.perf_counter()
             self.silencer.start()        # önce odayı sustur
+            yavas("susturma", t)
             text = record(self.hotkey.is_held, max_s=self._max_s,
                           on_frame=self._on_frame, on_stop=self._on_stop)
         finally:
@@ -203,8 +236,12 @@ class Typer:
         # sonraya almak kelimelerin ekrana ~300 ms daha erken düşmesini
         # sağlar. Kontrol yalnızca kartı GÖSTERİP göstermeyeceğine karar
         # verir, asla yazılıp yazılmayacağına.
+        t = time.perf_counter()
         paste.send(text, self.hotkey)
+        # Değiştirici tuşların kalkmasını 2 sn'ye kadar beklemek normal.
+        t = yavas("yapıştırma", t, esik=2.5)
         kind = focus.kind()
+        yavas("odak kontrolü", t)
         log(f"[typer] odak: {kind}")
 
         # KART NE ZAMAN ÇIKAR — bkz. config.py, "card_when".

@@ -93,8 +93,11 @@ takıma dağıtırken "çalışmıyor" cümlesini hangi parçanın eksik olduğu
 Kısayol bir **anahtar/kilit**tir, basılı tutulmaz: bir bas konuş, bir bas
 bitir. Arada tuş serbest olduğu için iki elin de klavyede kalır.
 
-Mikrofon açıkken diğer uygulamalar susturulur, ki arkada çalan müzik ya
-da video kaydın içine karışmasın. Spotify susturulmaz, **duraklatılır**:
+Mikrofon açıkken bilgisayarın sesi kapatılır, ki arkada çalan müzik ya
+da video kaydın içine karışmasın: Windows'ta toplam ses (görev
+çubuğundaki ses simgesi), macOS'ta yalnızca Music. Ses mikrofon kapanır
+kapanmaz geri gelir; zaten kapalıysa Typer ona dokunmaz. Uygulamaların
+kendi ses ayarları hiç değişmez. Spotify ayrıca **duraklatılır**:
 susturulmuş müzik çalmaya devam eder ve bir dakikalık dikte şarkının bir
 dakikasını yutar. Kayıt bitince kaldığı yerden devam eder — ve senin
 kendi duraklattığın müzik asla kendiliğinden çalmaz.

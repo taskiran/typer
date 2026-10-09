@@ -8,10 +8,11 @@ etmek videoyu da kaydeder ve çeviri seninle onun karışımı olur.
 
 İki işletim sistemi, iki farklı en iyi:
 
-  Windows  Her uygulama tek tek susturulur (WASAPI oturum sesi). Kendi
-           sürecimiz ve çocukları asla susturulmaz — bliplerimizi
-           kesmiş oluruz. Yalnızca BİZİM susturduklarımız geri açılır:
-           zaten senin sustumuş olduğun bir uygulama susturulmuş kalır.
+  Windows  Bilgisayarın TOPLAM sesi kapatılır — varsayılan çıkış
+           cihazının ana sesi, görev çubuğundaki ses simgesinin
+           kendisi. Uygulamalar tek tek susturulmaz; nedeni aşağıda,
+           Windows bölümünün başında. Ses zaten kapalıysa dokunulmaz
+           ve sonra da açılmaz.
 
   macOS    İşletim sistemi uygulama başına susturma sunmaz. Bu yüzden
            yalnızca Music kısılır — pratikte suçluların ezici
@@ -312,93 +313,123 @@ def _appcommand(hwnd, cmd, timeout_ms: int = 30) -> bool:
 
 
 # ---------------------------------------------------------------- Windows
+#
+# TOPLAM SES KAPATILIR, UYGULAMALAR TEK TEK DEĞİL.
+#
+# Eskiden her uygulamanın kendi oturumu susturuluyordu, ve sahada
+# oyunların sesi dikteden sonra kapalı kaldı. Sebep, Windows'un
+# uygulama başına susturmayı KALICI olarak saklaması (HKCU\...\Audio\
+# PolicyConfig\PropertyStore, özellik {219ED5A0-...},5): bir oyunu
+# susturunca Windows bunu diske yazıyor. Oyun dikte sırasında ses
+# oturumunu yeniden kurarsa yeni oturum "sessiz" doğuyor, biz ise
+# elimizdeki ESKİ oturumu geri açıyorduk — ve oyun bir sonraki
+# açılışında da sessiz geliyordu. 2026-09-29'da bu bilgisayarda altı
+# uygulama kalıcı olarak sessiz bulundu.
+#
+# Ana ses tek bir anahtar: hiçbir uygulamanın ayarına dokunulmaz, geri
+# alınacak tek bir şey var, ve kalıntı bir susturma görev çubuğunda
+# görünür — tek tıkla düzelir. Yanlış bir şey kalırsa bile nerede
+# olduğu bellidir.
+#
+# Bedeli: kendi bliplerimiz de aynı çıkıştan çalıyor. Sıra bunu çözüyor:
+# açılış blibi susturmadan ÖNCE biter (blips.start bloklar), kapanış
+# blibi ise ses geri geldikten SONRA çalar (app._on_stop önce geri açar).
+
+_E_RENDER, _E_CONSOLE = 0, 0
+
+
+def _com():
+    """Bu iplikte COM hazır olsun.
+
+    Geri açma bir zamanlayıcı ipliğinde de koşabiliyor ve Python
+    iplikleri COM durumunu miras almaz. Eskiden bu yoldaki her hata
+    `except: pass` ile yutuluyordu — geri açılamayan bir uygulama iz
+    bırakmadan sessiz kalıyordu.
+    """
+    try:
+        import comtypes
+        comtypes.CoInitializeEx(comtypes.COINIT_MULTITHREADED)
+    except Exception:
+        pass                    # iplik zaten başka kipte başlatılmış: o da olur
+
+
+def _endpoint(cihaz_id=None):
+    """(cihaz kimliği, IAudioEndpointVolume). Kimlik yoksa varsayılan çıkış."""
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+    _com()
+    enum = AudioUtilities.GetDeviceEnumerator()
+    dev = (enum.GetDevice(cihaz_id) if cihaz_id
+           else enum.GetDefaultAudioEndpoint(_E_RENDER, _E_CONSOLE))
+    ep = dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    return dev.GetId(), ep.QueryInterface(IAudioEndpointVolume)
+
+
+def _ana_sesi_ac(cihaz_id):
+    """Kimliği bilinen cihazın ana sesini aç.
+
+    "acildi" | "zaten" (açıktı) | None (başarısız — sebep loglanır).
+    """
+    try:
+        _, ep = _endpoint(cihaz_id)
+        if not ep.GetMute():
+            return "zaten"
+        ep.SetMute(0, None)
+        return "acildi" if not ep.GetMute() else None
+    except Exception as e:
+        log(f"[silence] ana ses açılamadı: {e!r}")
+        return None
+
 
 class _WindowsSilencer:
     def __init__(self):
-        self._muted = []          # sustuğumuz SimpleAudioVolume tutamakları
-        self._pids = []
+        self._ep = None           # ana sesini kapattığımız cihaz (tutamak)
+        self._cihaz = None        # ve kimliği: tutamak ölürse yeniden bulmak için
         self._paused = None       # duraklattıysak (hwnd, pid)
         self._ticked = 0.0
 
     @property
     def active(self) -> bool:
-        # Duraklatma da sayılmalı: hiçbir oturum susturulmamış ama
-        # Spotify duraklatılmışsa, Silencer.end() zamanlayıcıyı hiç
-        # kurmaz ve müzik sonsuza kadar duraklı kalırdı.
-        return bool(self._muted) or self._paused is not None
+        # Duraklatma da sayılmalı: ana ses kapatılmamış ama Spotify
+        # duraklatılmışsa, Silencer.end() zamanlayıcıyı hiç kurmaz ve
+        # müzik sonsuza kadar duraklı kalırdı.
+        return self._ep is not None or self._paused is not None
 
     @property
     def paused(self) -> bool:
         return self._paused is not None
 
-    @staticmethod
-    def _ours() -> set:
-        pids = {os.getpid()}
-        try:
-            import psutil
-            pids |= {c.pid for c in
-                     psutil.Process(os.getpid()).children(recursive=True)}
-        except Exception:
-            pass
-        return pids
-
-    def _remember(self):
-        # Adlar pid'lerin yanına yazılır çünkü Windows pid'leri geri
-        # dönüştürür: yeniden başlattıktan sonra 4312 bambaşka biridir.
-        try:
-            import psutil
-            rows = []
-            for pid in self._pids:
-                try:
-                    rows.append({"pid": pid, "name": psutil.Process(pid).name()})
-                except Exception:
-                    pass
-            _write_state({"platform": "win32", "apps": rows})
-        except Exception:
-            pass
-
     def silence(self):
-        if self._muted or self._paused:
+        if self._ep is not None or self._paused:
             return                              # zaten sessiz
-        try:
-            from pycaw.pycaw import AudioUtilities
-        except Exception:
-            return                              # pycaw yok: işlemsiz
-        try:
-            sessions = AudioUtilities.GetAllSessions()
-        except Exception:
-            return
-        ours = self._ours()
 
-        # Spotify ÖNCE duraklatılır, sonra kalanlar susturulur.
-        # Duraklatılmış bir Spotify zaten sessizdir; ikisini birden
-        # yapmak, geri alınacak iki durum demek olurdu — ve yalnızca
-        # biri tutarsa geriye "çalıyor ama susturulmuş" ya da "duraklı
-        # ve susturulmuş" bir Spotify kalırdı.
-        atla = self._pause_spotify(sessions) if CFG.get("pause_spotify", True) \
-            else set()
-
-        for s in sessions:
-            proc = getattr(s, "Process", None)
-            if proc is None:
-                continue                        # sistem sesleri: dokunma
+        # Spotify ÖNCE duraklatılır: ana ses kapalıyken bile duraklatmak
+        # gerekiyor, çünkü susturulmuş müzik ilerlemeye devam eder.
+        if CFG.get("pause_spotify", True):
             try:
-                if proc.pid in ours or proc.pid in atla:
-                    continue
-                vol = s.SimpleAudioVolume
-                if vol.GetMute():
-                    continue                    # kullanıcı zaten susturmuş
-                vol.SetMute(1, None)
-                self._muted.append(vol)
-                self._pids.append(proc.pid)
+                from pycaw.pycaw import AudioUtilities
+                _com()
+                self._pause_spotify(AudioUtilities.GetAllSessions())
             except Exception:
-                continue                        # oturum tarama sırasında öldü
-        if self._muted:
-            self._remember()
+                pass                            # duraklatma en iyi çabadır
+
+        try:
+            cihaz, ep = _endpoint()
+            if ep.GetMute():
+                return      # kullanıcı zaten kapatmış: dokunma, geri de açma
+            # ÖNCE diske, SONRA sustur. Tam arada ölürsek bir sonraki
+            # açılış zaten açık bir cihazı "açar" — zararsız. Ters sırada
+            # ölürsek makine hiçbir kaydı olmayan bir sessizlikte kalırdı.
+            _write_state({"platform": "win32", "master": cihaz})
+            ep.SetMute(1, None)
+            self._ep, self._cihaz = ep, cihaz
+        except Exception as e:
+            _clear_state()
+            log(f"[silence] ana ses kapatılamadı: {e!r}")
 
     def _pause_spotify(self, sessions) -> set:
-        """Spotify çalıyorsa duraklat. Susturma döngüsünün atlaması
-        gereken pid kümesini döndürür (duraklatma tutmadıysa boş).
+        """Spotify çalıyorsa duraklat. Duraklatılan Spotify'ın pid
+        kümesini döndürür (duraklatma tutmadıysa boş).
 
         Duraklatmak, susturmanın çözemediği bir şeyi çözer: susturulmuş
         müzik ilerlemeye devam eder.
@@ -467,15 +498,38 @@ class _WindowsSilencer:
         # ilerleyen ama duyulmayan bir şarkı kalır — teşhisi en zor
         # arıza. Bu sırada ise geriye duraklatılmış, sesi yerinde bir
         # Spotify kalır: kullanıcı görür, bir tıkla düzeltir.
-        for vol in self._muted:
-            try:
-                vol.SetMute(0, None)
-            except Exception:
-                pass
-        self._muted = []
-        self._pids = []
-        _clear_state()
+        self.ana_sesi_ac()
+        self._muzigi_surdur()
 
+    def ana_sesi_ac(self):
+        """Yalnızca toplam sesi aç; duraklatılmış müzik beklesin.
+
+        Kapanış blibi sesin açılmasıyla müziğin sürmesi ARASINDA çalar
+        (bkz. app._kapanis): Spotify'ın akışını yeniden açması blibin
+        akışıyla aynı ana denk gelmesin.
+        """
+        ep, self._ep = self._ep, None
+        cihaz, self._cihaz = self._cihaz, None
+        if ep is not None:
+            acildi = False
+            try:
+                ep.SetMute(0, None)
+                acildi = not ep.GetMute()
+            except Exception as e:
+                log(f"[silence] ana ses tutamakla açılamadı ({e!r}); "
+                    f"cihaz yeniden bulunuyor")
+            if not acildi:
+                acildi = _ana_sesi_ac(cihaz) is not None
+            if acildi:
+                _clear_state()
+            else:
+                # KAYIT DİSKTE KALIR: bir sonraki açılış yeniden dener.
+                # Silmek, makineyi sessiz ve habersiz bırakmak olurdu.
+                log("[silence] ana ses geri AÇILAMADI — görev çubuğundaki "
+                    "ses simgesinden açılabilir; Typer bir sonraki "
+                    "açılışında yeniden deneyecek")
+
+    def _muzigi_surdur(self):
         paused, self._paused = self._paused, None
         if not paused:
             return
@@ -491,7 +545,18 @@ class _WindowsSilencer:
             _appcommand(hwnd, _CMD_PLAY, timeout_ms=80)
 
     @staticmethod
+    def recover_master(cihaz):
+        """Önceki çalışma ana sesi kapatıp geri açamadan öldüyse."""
+        sonuc = _ana_sesi_ac(cihaz)
+        if sonuc == "acildi":
+            log("[silence] önceki çalışmadan kapalı kalan ana ses açıldı")
+        elif sonuc is None:
+            _write_state({"platform": "win32", "master": cihaz})
+
+    @staticmethod
     def recover(rows):
+        """ESKİ SÜRÜMÜN kaydı: uygulamalar tek tek susturulduğu zamandan.
+        Güncellemeden önce ölmüş bir Typer'ın bıraktığını geri açar."""
         try:
             from pycaw.pycaw import AudioUtilities
             # proc.name() pycaw'ın verdiği psutil.Process'ten gelir, o
@@ -662,7 +727,10 @@ def _recover_previous():
     if not data:
         return
     if data.get("platform") == "win32" and _WINDOWS:
-        _WindowsSilencer.recover(data.get("apps") or [])
+        if data.get("master"):
+            _WindowsSilencer.recover_master(data["master"])
+        if data.get("apps"):
+            _WindowsSilencer.recover(data["apps"])
     elif data.get("platform") == "darwin" and _DARWIN:
         _MacSilencer.recover(data.get("apps") or {})
 
@@ -727,6 +795,23 @@ class Silencer:
                 _BACKEND.tick()
             except Exception:
                 pass
+
+    @property
+    def yutar(self) -> bool:
+        """Susturma kendi bliplerimizi de yutar mı?
+
+        Windows'ta evet: toplam ses kapatılıyor. Çağıran bunu kapanış
+        blibinden ÖNCE geri açmak için kullanır. macOS'ta hayır (yalnızca
+        Music kısılıyor), ve orada önce geri açmak blibi osascript
+        çağrıları kadar geciktirirdi.
+        """
+        return _WINDOWS
+
+    def sesi_ac(self):
+        """Yalnızca toplam sesi aç (Windows); müzik restore_now ile sürer."""
+        with self._lock:
+            if _BACKEND is not None and hasattr(_BACKEND, "ana_sesi_ac"):
+                _BACKEND.ana_sesi_ac()
 
     def restore_now(self):
         """Kapanış yolları için eşzamanlı geri açma — gecikme zamanlayıcısı

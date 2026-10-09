@@ -104,12 +104,13 @@ DEFAULTS = {
     # doğru yola çıkmıştır.
     "sounds": True,
 
-    # Mikrofon açıkken diğer uygulamaları sustur, ki müzik ya da video
-    # kaydın içine karışmasın.
-    #   Windows: her uygulama tek tek susturulur (WASAPI oturum sesi).
-    #   macOS:   yalnızca Music kısılır — işletim sistemi uygulama
-    #            başına susturma sunmaz.
-    # Kendi sürecimiz ve çocukları asla susturulmaz.
+    # Mikrofon açıkken odayı sustur, ki müzik ya da video kaydın içine
+    # karışmasın.
+    #   Windows: bilgisayarın TOPLAM sesi (varsayılan çıkış cihazı)
+    #            kapatılır, mikrofon kapanınca geri açılır. Uygulamaların
+    #            kendi ses ayarlarına dokunulmaz — bkz. silence.py.
+    #   macOS:   yalnızca Music kısılır.
+    # Ses zaten kapalıysa dokunulmaz ve sonra da açılmaz.
     "mute_others": True,
 
     # Spotify'ı susturmak yerine DURAKLAT. Susturulmuş bir Spotify
